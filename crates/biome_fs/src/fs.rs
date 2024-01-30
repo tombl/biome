@@ -16,6 +16,9 @@ mod os;
 pub const ROME_JSON: &str = "rome.json";
 pub const BIOME_JSON: &str = "biome.json";
 
+type ForEachPath<'fs, 'scope> = Box<dyn Fn(&Path) + Sync + Send + 'fs>;
+
+
 pub trait FileSystem: Send + Sync + RefUnwindSafe {
     /// It opens a file with the given set of options
     fn open_with_options(&self, path: &Path, options: OpenOptions) -> io::Result<Box<dyn File>>;
@@ -25,6 +28,9 @@ pub trait FileSystem: Send + Sync + RefUnwindSafe {
     /// This method creates a new "traversal scope" that can be used to
     /// efficiently batch many filesystem read operations
     fn traversal<'scope>(&'scope self, func: BoxedTraversal<'_, 'scope>);
+
+    /// TODO: add documentation
+    fn for_each_path(&self, func: ForEachPath);
 
     // TODO: remove once we remove `rome.json` support [2.0]
     /// Returns the temporary configuration files that are supported
@@ -272,12 +278,18 @@ pub trait TraversalContext: Sync {
     /// This method will be called by the traversal for each file it finds
     /// where [TraversalContext::can_handle] returned true
     fn handle_file(&self, path: &Path);
+
+
+    fn store_file(&self, path: &Path);
 }
 
 impl<T> FileSystem for Arc<T>
 where
     T: FileSystem + Send,
 {
+    fn for_each_path(&self,  func: ForEachPath) {
+        T::for_each_path(self,  func)
+    }
     fn open_with_options(&self, path: &Path, options: OpenOptions) -> io::Result<Box<dyn File>> {
         T::open_with_options(self, path, options)
     }
@@ -297,6 +309,7 @@ where
     fn get_changed_files(&self, base: &str) -> io::Result<Vec<String>> {
         T::get_changed_files(self, base)
     }
+
 }
 
 #[derive(Debug, Diagnostic, Deserialize, Serialize)]

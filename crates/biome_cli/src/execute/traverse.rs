@@ -1,4 +1,4 @@
-use super::process_file::{process_file, DiffKind, FileStatus, Message};
+use super::process_file::{store_file, DiffKind, FileStatus, Message, FileResult, process_file};
 use super::ExecutionEnvironment;
 use crate::cli_options::CliOptions;
 use crate::execute::diagnostics::{
@@ -13,11 +13,7 @@ use biome_diagnostics::{Diagnostic, DiagnosticTags};
 use biome_fs::{FileSystem, PathInterner, RomePath};
 use biome_fs::{TraversalContext, TraversalScope};
 use biome_service::workspace::{FeaturesBuilder, IsPathIgnoredParams};
-use biome_service::{
-    extension_error,
-    workspace::{FeatureName, SupportsFeatureParams},
-    Workspace, WorkspaceError,
-};
+use biome_service::{extension_error, workspace::SupportsFeatureParams, Workspace, WorkspaceError};
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use rustc_hash::FxHashSet;
 use std::sync::atomic::AtomicU64;
@@ -33,6 +29,7 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
+use std::panic::UnwindSafe;
 
 struct CheckResult {
     count: usize,
@@ -236,6 +233,10 @@ fn traverse_inputs(fs: &dyn FileSystem, inputs: Vec<OsString>, ctx: &TraversalOp
         for input in inputs {
             scope.spawn(ctx, PathBuf::from(input));
         }
+    }));
+    
+    fs.for_each_path(Box::new(move | path| {
+        ctx.handle_file(path)
     }));
 
     start.elapsed()
@@ -677,28 +678,33 @@ impl<'ctx, 'app> TraversalContext for TraversalOptions<'ctx, 'app> {
         };
         match self.execution.traversal_mode() {
             TraversalMode::Check { .. } | TraversalMode::CI { .. } => {
-                file_features.supports_for(&FeatureName::Lint)
-                    || file_features.supports_for(&FeatureName::Format)
-                    || file_features.supports_for(&FeatureName::OrganizeImports)
+                file_features.supports_lint()
+                    || file_features.supports_format()
+                    || file_features.supports_organize_imports()
             }
-            TraversalMode::Format { .. } => file_features.supports_for(&FeatureName::Format),
-            TraversalMode::Lint { .. } => file_features.supports_for(&FeatureName::Lint),
+            TraversalMode::Format { .. } => file_features.supports_format(),
+            TraversalMode::Lint { .. } => file_features.supports_lint(),
             // Imagine if Biome can't handle its own configuration file...
             TraversalMode::Migrate { .. } => true,
         }
     }
 
     fn handle_file(&self, path: &Path) {
-        handle_file(self, path)
+        handle_file(self, path, process_file)
+    }
+
+    fn store_file(&self, path: &Path) {
+        handle_file(self, path, store_file)
     }
 }
 
-/// This function wraps the [process_file] function implementing the traversal
+/// This function wraps the [store_file] function implementing the traversal
 /// in a [catch_unwind] block and emit diagnostics in case of error (either the
 /// traversal function returns Err or panics)
-fn handle_file(ctx: &TraversalOptions, path: &Path) {
-    match catch_unwind(move || process_file(ctx, path)) {
+fn handle_file<F>(ctx: &TraversalOptions, path: &Path, func: F) where F: Fn(&TraversalOptions, &Path) -> FileResult + UnwindSafe {
+    match catch_unwind(move || func(ctx, path)) {
         Ok(Ok(FileStatus::Success)) => {}
+        Ok(Ok(FileStatus::Stored)) => {}
         Ok(Ok(FileStatus::Message(msg))) => {
             ctx.push_message(msg);
         }
