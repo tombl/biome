@@ -1,12 +1,15 @@
-use crate::aria_services::Aria;
-use biome_analyze::{context::RuleContext, declare_rule, Rule, RuleDiagnostic};
+use crate::{aria_services::Aria, JsRuleAction};
+use biome_analyze::{
+    context::RuleContext, declare_rule, ActionCategory, FixKind, Rule, RuleDiagnostic, RuleSource,
+};
 use biome_aria::AriaRoles;
 use biome_console::markup;
+use biome_diagnostics::Applicability;
 use biome_js_syntax::{
     jsx_ext::AnyJsxElement, AnyJsxAttributeValue, JsNumberLiteralExpression,
     JsStringLiteralExpression, JsUnaryExpression, TextRange,
 };
-use biome_rowan::{declare_node_union, AstNode};
+use biome_rowan::{declare_node_union, AstNode, BatchMutationExt};
 
 declare_rule! {
     /// Enforce that `tabIndex` is not assigned to non-interactive HTML elements.
@@ -14,8 +17,6 @@ declare_rule! {
     /// When using the tab key to navigate a webpage, limit it to interactive elements.
     /// You don't need to add tabindex to items in an unordered list as assistive technology can navigate through the HTML.
     /// Keep the tab ring small, which is the order of elements when tabbing, for a more efficient and accessible browsing experience.
-    ///
-    /// ESLint (eslint-plugin-jsx-a11y) Equivalent: [no-noninteractive-tabindex](https://github.com/jsx-eslint/eslint-plugin-jsx-a11y/blob/main/docs/rules/no-noninteractive-tabindex.md)
     ///
     /// ## Examples
     ///
@@ -33,7 +34,7 @@ declare_rule! {
     /// <article tabIndex="0" />
     /// ```
     ///
-    /// ## Valid
+    /// ### Valid
     ///
     /// ```jsx
     /// <div />
@@ -50,7 +51,9 @@ declare_rule! {
     pub(crate) NoNoninteractiveTabindex {
         version: "1.0.0",
         name: "noNoninteractiveTabindex",
+        source: RuleSource::EslintJsxA11y("no-noninteractive-tabindex"),
         recommended: true,
+        fix_kind: FixKind::Unsafe,
     }
 }
 
@@ -151,6 +154,21 @@ impl Rule for NoNoninteractiveTabindex {
                 "Adding non-interactive elements to the keyboard navigation flow can confuse users."
             }),
         )
+    }
+
+    fn action(ctx: &RuleContext<Self>, _: &Self::State) -> Option<JsRuleAction> {
+        let node = ctx.query();
+        let tabindex_attribute = node.find_attribute_by_name("tabIndex")?;
+        let mut mutation = ctx.root().begin();
+
+        mutation.remove_node(tabindex_attribute);
+        Some(JsRuleAction {
+            category: ActionCategory::QuickFix,
+            applicability: Applicability::MaybeIncorrect,
+            message: markup! { "Remove the "<Emphasis>"tabIndex"</Emphasis>" attribute." }
+                .to_owned(),
+            mutation,
+        })
     }
 }
 

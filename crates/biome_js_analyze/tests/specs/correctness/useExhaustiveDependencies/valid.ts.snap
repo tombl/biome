@@ -3,7 +3,7 @@ source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: valid.ts
 ---
 # Input
-```js
+```ts
 /* should not generate diagnostics */
 
 import { useEffect } from "react";
@@ -43,6 +43,14 @@ export function MyComponent2() {
     useEffect(() => {
         if (selectedArticle?.redirectUrl) {}
     }, [selectedArticle?.redirectUrl]);
+}
+
+// Excludes captures from TS typeof
+export function MyComponent3({ outer }: { outer: string[] }) {
+		useEffect(() => {
+			const a: (typeof outer)[number] = "foo";
+			console.log(a)
+		}, []);
 }
 
 ```

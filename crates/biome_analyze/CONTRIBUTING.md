@@ -121,7 +121,7 @@ Let's say we want to create a new rule called `myRuleName`, which uses the seman
    }
    ```
 
-   While implementing the diagnostic, please keep [Biome's technical principals](https://biomejs.dev/#technical) in mind.
+   While implementing the diagnostic, please keep [Biome's technical principals](https://biomejs.dev/internals/philosophy/#technical) in mind.
    This function is called for every signal emitted by the `run` function, and it may return
    zero or one diagnostic.
 
@@ -188,7 +188,7 @@ just test-lintrule myRuleName
 and if you've done everything correctly,
 you should see some snapshots emitted with diagnostics and code actions.
 
-Check our main [contribution document](https://github.com/biomejs/biome/blob/main/CONTRIBUTING.md#snapshot-tests)
+Check our main [contribution document](https://github.com/biomejs/biome/blob/main/CONTRIBUTING.md#testing)
 to know how to deal with the snapshot tests.
 
 ### Promote a rule
@@ -266,7 +266,7 @@ diagnostic in the resulting documentation page.
 For simplicity, use `just` to run all the commands with:
 
 ```shell
-just codegen-linter
+just gen-lint
 ```
 
 This command runs several sub-commands:
@@ -278,7 +278,7 @@ This command runs several sub-commands:
 
 - `cargo codegen-bindings`, it will update the TypeScript types released inside the JS APIs;
 
-- `cargo codegen-schema`, it will update the JSON Schema file of the configuration, used by VSCode.
+- `cargo codegen-schema`, it will update the JSON Schema file of the configuration, used by the npm packages.
 
 ### Commit your work
 
@@ -299,27 +299,18 @@ just ready
 
 ### Rule configuration
 
-Some rules may allow customization using configuration.
-The first step is to setup a struct to represent the rule configuration.
+Some rules may allow customization using options.
+We try to keep rule options to a minimum and only when needed.
+Before adding an option, it's worth a discussion.
+Options should follow our [technical philosophy](https://biomejs.dev/internals/philosophy/#technical).
 
-```rust,ignore
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReactExtensiveDependenciesOptions {
-    hooks_config: FxHashMap<String, ReactHookConfiguration>,
-    stable_config: FxHashSet<StableReactHookConfiguration>,
-}
+Let's assume that the rule we implement support the following options:
 
-impl Rule for UseExhaustiveDependencies {
-    type Query = Semantic<JsCallExpression>;
-    type State = Fix;
-    type Signals = Vec<Self::State>;
-    type Options = ReactExtensiveDependenciesOptions;
+- `behavior`: a string among `"A"`, `"B"`, and `"C"`;
+- `threshold`: an integer between 0 and 255;
+- `behaviorExceptions`: an array of strings.
 
-    ...
-}
-```
-
-This allows the rule to be configured inside `biome.json` file like:
+We would like to set the options in the `biome.json` configuration file:
 
 ```json
 {
@@ -327,11 +318,10 @@ This allows the rule to be configured inside `biome.json` file like:
     "rules": {
       "recommended": true,
       "nursery": {
-        "useExhaustiveDependencies": {
-          "level": "error",
-          "options": {
-            "hooks": [["useMyEffect", 0, 1]]
-          }
+        "my-rule": {
+          "behavior": "A",
+          "threshold": 30,
+          "behaviorExceptions": ["f"],
         }
       }
     }
@@ -339,10 +329,76 @@ This allows the rule to be configured inside `biome.json` file like:
 }
 ```
 
-A rule can retrieve its option with:
+The first step is to create the Rust data representation of the rule's options.
+
+```rust,ignore
+use biome_deserializable_macros::Deserializable;
+
+#[derive(Clone, Debug, Default, Deserializable)]
+pub struct MyRuleOptions {
+    behavior: Behavior,
+    threshold: u8,
+    behavior_exceptions: Vec<String>
+}
+
+#[derive(Clone, Debug, Default, Deserializable)]
+pub enum Behavior {
+    #[default]
+    A,
+    B,
+    C,
+}
+```
+
+To allow deserializing instances of the types `MyRuleOptions` and `Behavior`,
+they have to implement the `Deserializable` trait from the `biome_deserialize` crate.
+This is what the `Deserializable` keyword in the `#[derive]` statements above did.
+It's a so-called derive macros, which generates the implementation for the `Deserializable` trait
+for you.
+
+With these types in place, you can set the associated type `Options` of the rule:
+
+```rust,ignore
+impl Rule for MyRule {
+    type Query = Semantic<JsCallExpression>;
+    type State = Fix;
+    type Signals = Vec<Self::State>;
+    type Options = MyRuleOptions;
+
+    ...
+}
+```
+
+A rule can retrieve its options with:
 
 ```rust,ignore
 let options = ctx.options();
+```
+
+The compiler should warn you that `MyRuleOptions` does not implement some required types.
+We currently require implementing _serde_'s traits `Deserialize`/`Serialize`.
+You can simply use a derive macros:
+
+```rust,ignore
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(JsonSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct MyRuleOptions {
+    #[serde(default, skip_serializing_if = "is_default")]
+    main_behavior: Behavior,
+
+    #[serde(default, skip_serializing_if = "is_default")]
+    extra_behaviors: Vec<Behavior>,
+}
+
+#[derive(Debug, Default, Clone)]
+#[cfg_attr(feature = "schemars", derive(JsonSchema))]
+pub enum Behavior {
+    #[default]
+    A,
+    B,
+    C,
+}
 ```
 
 ### Deprecate a rule
@@ -522,6 +578,60 @@ impl Rule for ExampleRule {
             ctx.query().text_trimmed_range(),
             "message",
         ))
+    }
+}
+```
+
+### Semantic Model
+
+The semantic model provides information about the references of a binding (variable) within a program, indicating if it is written (e.g., `const a = 4`), read (e.g., `const b = a`, where `a` is read), or exported.
+
+
+#### How to use the query `Semantic<>` in a lint rule
+
+We have a for loop that creates an index i, and we need to identify where this index is used inside the body of the loop
+
+```js
+for (let i = 0; i < array.length; i++) {
+  array[i] = i
+}
+```
+
+To get started we need to create a new rule using the semantic type `type Query = Semantic<JsForStatement>;`
+We can now use the `ctx.model()` to get information about bindings in the for loop.
+
+```rust,ignore
+impl Rule for ForLoopCountReferences {
+    type Query = Semantic<JsForStatement>;
+    type State = ();
+    type Signals = Option<Self::State>;
+    type Options = ();
+
+    fn run(ctx: &RuleContext<Self>) -> Self::Signals {
+        let node = ctx.query();
+
+        // The model holds all informations about the semantic, like scopes and declarations
+        let model = ctx.model();
+
+        // Here we are extracting the `let i = 0;` declaration in for loop
+        let initializer = node.initializer()?;
+        let declarators = initializer.as_js_variable_declaration()?.declarators();
+        let initializer = declarators.first()?.ok()?;
+        let initializer_id = initializer.id().ok()?;
+
+        // Now we have the binding of this declaration
+        let binding = initializer_id
+            .as_any_js_binding()?
+            .as_js_identifier_binding()?;
+
+        // How many times this variable appers in the code
+        let count = binding.all_references(model).count();
+
+        // Get all read references
+        let readonly_references = binding.all_reads(model);
+
+        // Get all write references
+        let write_references = binding.all_writes(model);
     }
 }
 ```

@@ -230,7 +230,7 @@ pub struct ConfigAlreadyExists {}
 pub struct InvalidIgnorePattern {
     #[message]
     #[description]
-    message: String,
+    pub(crate) message: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Diagnostic)]
@@ -286,7 +286,7 @@ pub struct InvalidConfiguration {
 #[cfg(test)]
 mod test {
     use crate::configuration::diagnostics::ConfigurationDiagnostic;
-    use crate::{Configuration, MatchOptions, Matcher};
+    use crate::configuration::PartialConfiguration;
     use biome_deserialize::json::deserialize_from_json_str;
     use biome_diagnostics::{print_diagnostic_to_string, DiagnosticExt, Error};
     use biome_json_parser::JsonParserOptions;
@@ -316,33 +316,13 @@ mod test {
     }
 
     #[test]
-    fn incorrect_pattern() {
-        let mut matcher = Matcher::new(MatchOptions {
-            case_sensitive: true,
-            require_literal_leading_dot: false,
-            require_literal_separator: false,
-        });
-
-        let pattern = "*******";
-        if let Err(error) = matcher.add_pattern(pattern) {
-            snap_diagnostic(
-                "incorrect_pattern",
-                ConfigurationDiagnostic::new_invalid_ignore_pattern(
-                    pattern.to_string(),
-                    error.msg.to_string(),
-                )
-                .with_file_path("biome.json"),
-            )
-        } else {
-            panic!("The pattern should fail")
-        }
-    }
-
-    #[test]
     fn deserialization_error() {
         let content = "{ \n\n\"formatter\" }";
-        let result =
-            deserialize_from_json_str::<Configuration>(content, JsonParserOptions::default());
+        let result = deserialize_from_json_str::<PartialConfiguration>(
+            content,
+            JsonParserOptions::default(),
+            "",
+        );
 
         assert!(result.has_errors());
         for diagnostic in result.into_diagnostics() {
@@ -365,8 +345,12 @@ mod test {
     }
   }
 }"#;
-        let _result =
-            deserialize_from_json_str::<Configuration>(content, JsonParserOptions::default())
-                .into_deserialized();
+        let _result = deserialize_from_json_str::<PartialConfiguration>(
+            content,
+            JsonParserOptions::default(),
+            "",
+        )
+        .into_deserialized()
+        .unwrap_or_default();
     }
 }

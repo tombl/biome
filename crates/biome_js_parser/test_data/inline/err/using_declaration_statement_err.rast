@@ -1,4 +1,5 @@
 JsModule {
+    bom_token: missing (optional),
     interpreter_token: missing (optional),
     directives: JsDirectiveList [],
     items: JsModuleItemList [
@@ -265,8 +266,9 @@ JsModule {
 
 0: JS_MODULE@0..172
   0: (empty)
-  1: JS_DIRECTIVE_LIST@0..0
-  2: JS_MODULE_ITEM_LIST@0..171
+  1: (empty)
+  2: JS_DIRECTIVE_LIST@0..0
+  3: JS_MODULE_ITEM_LIST@0..171
     0: JS_VARIABLE_STATEMENT@0..8
       0: JS_VARIABLE_DECLARATION@0..7
         0: (empty)
@@ -435,18 +437,18 @@ JsModule {
               1: JS_NUMBER_LITERAL_EXPRESSION@169..170
                 0: JS_NUMBER_LITERAL@169..170 "1" [] []
       1: SEMICOLON@170..171 ";" [] []
-  3: EOF@171..172 "" [Newline("\n")] []
+  4: EOF@171..172 "" [Newline("\n")] []
 --
 using_declaration_statement_err.js:1:7 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  × Using declarations must have an initialized value
+  × Using declarations must have an initialized value.
   
   > 1 │ using a;
       │       ^
     2 │ using {b};
     3 │ using c = d, e;
   
-  i this variable needs to be initialized
+  i This variable needs to be initialized.
   
 --
 using_declaration_statement_err.js:2:7 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -478,7 +480,7 @@ using_declaration_statement_err.js:2:7 parse ━━━━━━━━━━━�
 --
 using_declaration_statement_err.js:3:14 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  × Using declarations must have an initialized value
+  × Using declarations must have an initialized value.
   
     1 │ using a;
     2 │ using {b};
@@ -487,12 +489,12 @@ using_declaration_statement_err.js:3:14 parse ━━━━━━━━━━━�
     4 │ export using m = n;
     5 │ await using f;
   
-  i this variable needs to be initialized
+  i This variable needs to be initialized.
   
 --
 using_declaration_statement_err.js:4:8 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  × expected a class, a function, or a variable declaration but instead found 'using'
+  × Expected a class, a function, or a variable declaration but instead found 'using'.
   
     2 │ using {b};
     3 │ using c = d, e;
@@ -501,7 +503,7 @@ using_declaration_statement_err.js:4:8 parse ━━━━━━━━━━━�
     5 │ await using f;
     6 │ await using g = h, j;
   
-  i Expected a class, a function, or a variable declaration here
+  i Expected a class, a function, or a variable declaration here.
   
     2 │ using {b};
     3 │ using c = d, e;
@@ -513,7 +515,7 @@ using_declaration_statement_err.js:4:8 parse ━━━━━━━━━━━�
 --
 using_declaration_statement_err.js:5:13 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  × Using declarations must have an initialized value
+  × Using declarations must have an initialized value.
   
     3 │ using c = d, e;
     4 │ export using m = n;
@@ -522,12 +524,12 @@ using_declaration_statement_err.js:5:13 parse ━━━━━━━━━━━�
     6 │ await using g = h, j;
     7 │ await using [o] = p;
   
-  i this variable needs to be initialized
+  i This variable needs to be initialized.
   
 --
 using_declaration_statement_err.js:6:20 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  × Using declarations must have an initialized value
+  × Using declarations must have an initialized value.
   
     4 │ export using m = n;
     5 │ await using f;
@@ -536,7 +538,7 @@ using_declaration_statement_err.js:6:20 parse ━━━━━━━━━━━�
     7 │ await using [o] = p;
     8 │ export await using q = r;
   
-  i this variable needs to be initialized
+  i This variable needs to be initialized.
   
 --
 using_declaration_statement_err.js:7:1 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -555,7 +557,7 @@ using_declaration_statement_err.js:7:1 parse ━━━━━━━━━━━�
 --
 using_declaration_statement_err.js:8:8 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  × expected a class, a function, or a variable declaration but instead found 'await'
+  × Expected a class, a function, or a variable declaration but instead found 'await'.
   
      6 │ await using g = h, j;
      7 │ await using [o] = p;
@@ -564,7 +566,7 @@ using_declaration_statement_err.js:8:8 parse ━━━━━━━━━━━�
      9 │ await let s;
     10 │ await const t = 1;
   
-  i Expected a class, a function, or a variable declaration here
+  i Expected a class, a function, or a variable declaration here.
   
      6 │ await using g = h, j;
      7 │ await using [o] = p;
@@ -618,7 +620,7 @@ using_declaration_statement_err.js:9:11 parse ━━━━━━━━━━━�
 --
 using_declaration_statement_err.js:10:7 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  × expected an unary expression but instead found 'const'
+  × Expected an unary expression but instead found 'const'.
   
      8 │ export await using q = r;
      9 │ await let s;
@@ -626,7 +628,7 @@ using_declaration_statement_err.js:10:7 parse ━━━━━━━━━━━�
        │       ^^^^^
     11 │ 
   
-  i Expected an unary expression here
+  i Expected an unary expression here.
   
      8 │ export await using q = r;
      9 │ await let s;

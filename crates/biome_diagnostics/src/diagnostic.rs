@@ -1,4 +1,9 @@
-use std::{convert::Infallible, fmt::Debug, io};
+use std::{
+    convert::Infallible,
+    fmt::{Debug, Display},
+    io,
+    str::FromStr,
+};
 
 use bitflags::bitflags;
 use serde::{Deserialize, Serialize};
@@ -92,6 +97,7 @@ pub trait Diagnostic: Debug {
     /// - If the diagnostic is being emitted as part of a crash / fatal error
     /// - If the diagnostic is a warning about a piece of unused or unnecessary code
     /// - If the diagnostic is a warning about a piece of deprecated or obsolete code.
+    /// - If the diagnostic is meant to provide more information
     fn tags(&self) -> DiagnosticTags {
         DiagnosticTags::empty()
     }
@@ -107,7 +113,9 @@ pub trait Diagnostic: Debug {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default,
+)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 /// The severity to associate to a diagnostic.
@@ -115,6 +123,7 @@ pub enum Severity {
     /// Reports a hint.
     Hint,
     /// Reports an information.
+    #[default]
     Information,
     /// Reports a warning.
     Warning,
@@ -122,6 +131,35 @@ pub enum Severity {
     Error,
     /// Reports a crash.
     Fatal,
+}
+
+impl FromStr for Severity {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "hint" => Ok(Self::Information),
+            "info" => Ok(Self::Information),
+            "warn" => Ok(Self::Warning),
+            "error" => Ok(Self::Error),
+            v => Err(format!(
+                "Found unexpected value ({}), valid values are: info, warn, error.",
+                v
+            )),
+        }
+    }
+}
+
+impl Display for Severity {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Hint => write!(f, "info"),
+            Self::Information => write!(f, "info"),
+            Self::Warning => write!(f, "warn"),
+            Self::Error => write!(f, "error"),
+            Self::Fatal => write!(f, "fatal"),
+        }
+    }
 }
 
 /// Internal enum used to automatically generate bit offsets for [DiagnosticTags]
@@ -134,6 +172,7 @@ pub(super) enum DiagnosticTag {
     Internal,
     UnnecessaryCode,
     DeprecatedCode,
+    Verbose,
 }
 
 bitflags! {
@@ -149,6 +188,14 @@ bitflags! {
         /// This diagnostic tags deprecated or obsolete code, this may change
         /// how the diagnostic is render in editors.
         const DEPRECATED_CODE = 1 << DiagnosticTag::DeprecatedCode as u8;
+        /// This diagnostic is verbose and should be printed only if the `--verbose` option is provided
+        const VERBOSE = 1 << DiagnosticTag::Verbose as u8;
+    }
+}
+
+impl DiagnosticTags {
+    pub const fn is_verbose(&self) -> bool {
+        self.contains(Self::VERBOSE)
     }
 }
 

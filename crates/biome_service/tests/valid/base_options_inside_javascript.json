@@ -8,7 +8,9 @@
 			"enabled": true,
 			"indentStyle": "space",
 			"indentSize": 2,
-			"lineWidth": 200
+			"lineEnding": "lf",
+			"lineWidth": 200,
+			"quoteStyle": "single"
 		}
 	}
 }

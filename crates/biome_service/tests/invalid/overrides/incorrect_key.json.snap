@@ -17,11 +17,12 @@ incorrect_key.json:4:4 deserialize ━━━━━━━━━━━━━━━
   
   - ignore
   - include
+  - javascript
+  - json
+  - css
   - formatter
   - linter
   - organizeImports
-  - javascript
-  - json
   
 
 

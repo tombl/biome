@@ -102,7 +102,7 @@ pub(crate) fn create_bogus_node_in_tree_diagnostic(node: JsSyntaxNode) -> ParseD
         "There are no parse errors but the parsed tree contains bogus nodes.",
         node.text_trimmed_range()
     )
-    .hint( "This bogus node is present in the parsed tree but the parser didn't emit a diagnostic for it. Change the parser to either emit a diagnostic, fix the grammar, or the parsing.")
+    .with_hint( "This bogus node is present in the parsed tree but the parser didn't emit a diagnostic for it. Change the parser to either emit a diagnostic, fix the grammar, or the parsing.")
 }
 
 #[derive(Clone, Debug)]
@@ -233,7 +233,7 @@ pub(crate) fn run_test_suite(
 
         // Skip frames inside the backtrace lib
         for frame in backtrace.frames().iter().skip(6) {
-            if let Some(s) = frame.symbols().get(0) {
+            if let Some(s) = frame.symbols().first() {
                 if let Some(file) = s.filename() {
                     // We don't care about std or cargo registry libs
                     let file_path = file.as_os_str().to_str().unwrap();

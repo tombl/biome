@@ -161,6 +161,21 @@ a =
     } = {}
 
 
+const { looooooooooooooooooooooooooooooooooooooooooooongValue } =
+	await setup(2);
+
+function* f() {
+	const { looooooooooooooooooooooooooooooooooooooooooooongValue } =
+		yield setup(2);
+}
+
+export const MSG_WITH_REMOVED_ESCAPE_CHARACTER_TEST =
+  goog.getMsg("That\'s all we know");
+
+export const MSG_WITHOUT_ESCAPE_CHARACTER_TEST = goog.getMsg(
+	"That's all we know",
+);
+
 ```
 
 
@@ -173,6 +188,7 @@ a =
 -----
 Indent style: Tab
 Indent width: 2
+Line ending: LF
 Line width: 80
 Quote style: Double Quotes
 JSX quote style: Double Quotes
@@ -180,6 +196,9 @@ Quote properties: As needed
 Trailing comma: All
 Semicolons: Always
 Arrow parentheses: Always
+Bracket spacing: true
+Bracket same line: false
+Attribute Position: Auto
 -----
 
 ```js
@@ -407,6 +426,20 @@ a = {
 	loreum,
 	ipsurm,
 } = {};
+
+const { looooooooooooooooooooooooooooooooooooooooooooongValue } =
+	await setup(2);
+
+function* f() {
+	const { looooooooooooooooooooooooooooooooooooooooooooongValue } =
+		yield setup(2);
+}
+
+export const MSG_WITH_REMOVED_ESCAPE_CHARACTER_TEST =
+	goog.getMsg("That's all we know");
+
+export const MSG_WITHOUT_ESCAPE_CHARACTER_TEST =
+	goog.getMsg("That's all we know");
 ```
 
 # Lines exceeding max width of 80 characters

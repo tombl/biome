@@ -49,10 +49,9 @@ impl CliSnapshot {
         let mut content = String::new();
 
         if let Some(configuration) = &self.configuration {
-            let parsed = parse_json(
-                &redact_snapshot(configuration),
-                JsonParserOptions::default(),
-            );
+            let redacted = redact_snapshot(configuration).unwrap_or(String::new().into());
+
+            let parsed = parse_json(&redacted, JsonParserOptions::default());
             let formatted = format_node(
                 JsonFormatOptions::default()
                     .with_indent_style(IndentStyle::Space)
@@ -75,10 +74,14 @@ impl CliSnapshot {
             if !name.starts_with("biome.json") {
                 let extension = name.split('.').last().unwrap();
 
-                let _ = write!(content, "## `{}`\n\n", redact_snapshot(name));
+                let redacted_name = redact_snapshot(name).unwrap_or(String::new().into());
+                let redacted_content =
+                    redact_snapshot(file_content).unwrap_or(String::new().into());
+
+                let _ = write!(content, "## `{}`\n\n", redacted_name);
                 let _ = write!(content, "```{extension}");
                 content.push('\n');
-                content.push_str(&redact_snapshot(file_content));
+                content.push_str(&redacted_content);
                 content.push('\n');
                 content.push_str("```");
                 content.push_str("\n\n")
@@ -97,22 +100,29 @@ impl CliSnapshot {
 
         if let Some(termination) = &self.termination {
             let message = print_diagnostic_to_string(termination);
-            content.push_str("# Termination Message\n\n");
-            content.push_str("```block");
-            content.push('\n');
-            content.push_str(&redact_snapshot(&message));
-            content.push('\n');
-            content.push_str("```");
-            content.push_str("\n\n");
+
+            if let Some(redacted) = &redact_snapshot(&message) {
+                content.push_str("# Termination Message\n\n");
+                content.push_str("```block");
+                content.push('\n');
+                content.push_str(redacted);
+                content.push('\n');
+                content.push_str("```");
+                content.push_str("\n\n");
+            }
         }
 
         if !self.messages.is_empty() {
             content.push_str("# Emitted Messages\n\n");
 
             for message in &self.messages {
+                let Some(redacted) = &redact_snapshot(message) else {
+                    continue;
+                };
+
                 content.push_str("```block");
                 content.push('\n');
-                content.push_str(&redact_snapshot(message));
+                content.push_str(redacted);
                 content.push('\n');
                 content.push_str("```");
                 content.push_str("\n\n")
@@ -123,7 +133,7 @@ impl CliSnapshot {
     }
 }
 
-fn redact_snapshot(input: &str) -> Cow<'_, str> {
+fn redact_snapshot(input: &str) -> Option<Cow<'_, str>> {
     let mut output = Cow::Borrowed(input);
 
     // There are some logs that print the timing, and we can't snapshot that message
@@ -147,6 +157,34 @@ fn redact_snapshot(input: &str) -> Cow<'_, str> {
     }
 
     output = replace_temp_dir(output);
+    output = replace_biome_dir(output);
+
+    // Ref: https://docs.github.com/actions/learn-github-actions/variables#default-environment-variables
+    let is_github = std::env::var("GITHUB_ACTIONS")
+        .ok()
+        .map(|value| value == "true")
+        .unwrap_or(false);
+
+    if is_github {
+        // GitHub actions sets the env var GITHUB_ACTIONS=true in CI
+        // Based on that, biome also has a feature that detects if it's running on GH Actions and
+        // emits additional information in the output (workflow commands, see PR + discussion at #681)
+        // To avoid polluting snapshots with that, we filter out those lines
+
+        let lines: Vec<_> = output
+            .split('\n')
+            .filter(|line| {
+                !line.starts_with("::notice ")
+                    && !line.starts_with("::warning ")
+                    && !line.starts_with("::error ")
+            })
+            .collect();
+
+        output = Cow::Owned(lines.join("\n"));
+        if output.is_empty() {
+            return None;
+        }
+    }
 
     // Normalize Windows-specific path separators to "/"
     if cfg!(windows) {
@@ -185,7 +223,7 @@ fn redact_snapshot(input: &str) -> Cow<'_, str> {
         }
     }
 
-    output
+    Some(output)
 }
 
 /// Replace the path to the temporary directory with "<TEMP_DIR>"
@@ -202,6 +240,46 @@ fn replace_temp_dir(input: Cow<str>) -> Cow<str> {
 
         result.push_str(before);
         result.push_str("<TEMP_DIR>");
+
+        let after = after.split_at(temp_dir.len()).1;
+        let header_line = after.lines().next().unwrap();
+
+        match header_line.split_once('\u{2501}') {
+            Some((between_temp_and_line, _)) => {
+                // Diagnostic header line, normalize the horizontal line
+                result.push_str(between_temp_and_line);
+                result.push_str(&"\u{2501}".repeat(20));
+                rest = after.split_at(header_line.len()).1;
+            }
+            None => {
+                // Not a header line, only replace tempdir
+                rest = after;
+            }
+        }
+    }
+
+    if result.is_empty() {
+        input
+    } else {
+        result.push_str(rest);
+        Cow::Owned(result)
+    }
+}
+
+/// Replace the path to the temporary directory with "<TEMP_DIR>"
+/// And normalizes the count of `-` at the end of the diagnostic
+fn replace_biome_dir(input: Cow<str>) -> Cow<str> {
+    let mut result = String::new();
+    let mut rest = input.as_ref();
+
+    let temp_dir = biome_fs::ensure_cache_dir().display().to_string();
+    let temp_dir = temp_dir.trim_end_matches(MAIN_SEPARATOR);
+
+    while let Some(index) = rest.find(temp_dir) {
+        let (before, after) = rest.split_at(index);
+
+        result.push_str(before);
+        result.push_str("<BIOME_DIR>");
 
         let after = after.split_at(temp_dir.len()).1;
         let header_line = after.lines().next().unwrap();
@@ -354,14 +432,17 @@ pub fn assert_cli_snapshot(payload: SnapshotPayload<'_>) {
 }
 
 /// It checks if the contents of a file matches the passed `expected_content`
-pub fn assert_file_contents(fs: &MemoryFileSystem, file: &Path, expected_content: &str) {
-    let mut file = fs.open(file).expect("file was removed");
+pub fn assert_file_contents(fs: &MemoryFileSystem, path: &Path, expected_content: &str) {
+    let mut file = fs.open(path).expect("file was removed");
 
     let mut content = String::new();
     file.read_to_string(&mut content)
         .expect("failed to read file from memory FS");
 
-    assert_eq!(content, expected_content);
-
-    // drop(file);
+    assert_eq!(
+        content,
+        expected_content,
+        "file {} doesn't match the expected content (right)",
+        path.display()
+    );
 }

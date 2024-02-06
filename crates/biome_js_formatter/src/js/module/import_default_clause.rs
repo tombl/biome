@@ -11,7 +11,7 @@ impl FormatNodeRule<JsImportDefaultClause> for FormatJsImportDefaultClause {
     fn fmt_fields(&self, node: &JsImportDefaultClause, f: &mut JsFormatter) -> FormatResult<()> {
         let JsImportDefaultClauseFields {
             type_token,
-            local_name,
+            default_specifier,
             from_token,
             source,
             assertion,
@@ -24,7 +24,7 @@ impl FormatNodeRule<JsImportDefaultClause> for FormatJsImportDefaultClause {
         write![
             f,
             [
-                local_name.format(),
+                default_specifier.format(),
                 space(),
                 from_token.format(),
                 space(),
@@ -33,7 +33,7 @@ impl FormatNodeRule<JsImportDefaultClause> for FormatJsImportDefaultClause {
         ]?;
 
         if let Some(assertion) = assertion {
-            write!(f, [space(), assertion.format()])?;
+            write!(f, [assertion.format()])?;
         }
 
         Ok(())

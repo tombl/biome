@@ -9,12 +9,12 @@ use std::os::windows::fs::{symlink_dir, symlink_file};
 use std::path::{Path, PathBuf};
 
 use crate::configs::{
-    CONFIG_FILE_SIZE_LIMIT, CONFIG_IGNORE_SYMLINK, CONFIG_LINTER_AND_FILES_IGNORE,
-    CONFIG_LINTER_DISABLED, CONFIG_LINTER_DOWNGRADE_DIAGNOSTIC, CONFIG_LINTER_IGNORED_FILES,
+    CONFIG_FILE_SIZE_LIMIT, CONFIG_IGNORE_SYMLINK, CONFIG_LINTER_DISABLED,
+    CONFIG_LINTER_DOWNGRADE_DIAGNOSTIC, CONFIG_LINTER_IGNORED_FILES,
     CONFIG_LINTER_SUPPRESSED_GROUP, CONFIG_LINTER_SUPPRESSED_RULE,
     CONFIG_LINTER_UPGRADE_DIAGNOSTIC, CONFIG_RECOMMENDED_GROUP,
 };
-use crate::snap_test::{markup_to_string, SnapshotPayload};
+use crate::snap_test::{assert_file_contents, markup_to_string, SnapshotPayload};
 use crate::{assert_cli_snapshot, run_cli, FORMATTED, LINT_ERROR, PARSE_ERROR};
 use biome_console::{markup, BufferConsole, LogLevel, MarkupBuf};
 use biome_fs::{ErrorEntry, FileSystemExt, MemoryFileSystem, OsFileSystem};
@@ -389,27 +389,8 @@ function f() {\n\targuments;\n}
 
     assert!(result.is_err(), "run_cli returned {result:?}");
 
-    let mut file = fs
-        .open(test1)
-        .expect("formatting target file was removed by the CLI");
-
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .expect("failed to read file from memory FS");
-
-    assert_eq!(content, expected);
-    drop(file);
-
-    content.clear();
-
-    let mut file = fs
-        .open(test2)
-        .expect("formatting target file was removed by the CLI");
-
-    file.read_to_string(&mut content)
-        .expect("failed to read file from memory FS");
-
-    drop(file);
+    assert_file_contents(&fs, test1, expected);
+    assert_file_contents(&fs, test2, expected);
 
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
@@ -728,7 +709,19 @@ fn no_lint_if_files_are_listed_in_ignore_option() {
     let mut console = BufferConsole::default();
 
     let file_path = Path::new("biome.json");
-    fs.insert(file_path.into(), CONFIG_LINTER_AND_FILES_IGNORE.as_bytes());
+    fs.insert(
+        file_path.into(),
+        r#"{
+  "files": {
+    "ignore": ["test1.js"]
+  },
+  "linter": {
+    "enabled": true,
+    "ignore": ["test2.js"]
+  }
+}"#
+        .as_bytes(),
+    );
 
     let file_path_test1 = Path::new("test1.js");
     fs.insert(file_path_test1.into(), FIX_BEFORE.as_bytes());
@@ -752,21 +745,8 @@ fn no_lint_if_files_are_listed_in_ignore_option() {
 
     assert!(result.is_ok(), "run_cli returned {result:?}");
 
-    let mut buffer = String::new();
-    fs.open(file_path_test1)
-        .unwrap()
-        .read_to_string(&mut buffer)
-        .unwrap();
-
-    assert_eq!(buffer, FIX_BEFORE);
-
-    let mut buffer = String::new();
-    fs.open(file_path_test2)
-        .unwrap()
-        .read_to_string(&mut buffer)
-        .unwrap();
-
-    assert_eq!(buffer, CHECK_FORMAT_AFTER);
+    assert_file_contents(&fs, file_path_test1, FIX_BEFORE);
+    assert_file_contents(&fs, file_path_test2, CHECK_FORMAT_AFTER);
 
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
@@ -817,7 +797,7 @@ fn fs_error_dereferenced_symlink() {
     }
 
     let result = run_cli(
-        DynRef::Owned(Box::new(OsFileSystem)),
+        DynRef::Owned(Box::new(OsFileSystem(Some(root_path.clone())))),
         &mut console,
         Args::from([("check"), root_path.display().to_string().as_str()].as_slice()),
     );
@@ -861,7 +841,7 @@ fn fs_error_infinite_symlink_expansion_to_dirs() {
     }
 
     let result = run_cli(
-        DynRef::Owned(Box::new(OsFileSystem)),
+        DynRef::Owned(Box::new(OsFileSystem(Some(root_path.clone())))),
         &mut console,
         Args::from([("check"), (root_path.display().to_string().as_str())].as_slice()),
     );
@@ -907,7 +887,7 @@ fn fs_error_infinite_symlink_expansion_to_files() {
     }
 
     let result = run_cli(
-        DynRef::Owned(Box::new(OsFileSystem)),
+        DynRef::Owned(Box::new(OsFileSystem(Some(root_path.clone())))),
         &mut console,
         Args::from([("check"), (root_path.display().to_string().as_str())].as_slice()),
     );
@@ -1087,7 +1067,7 @@ fn fs_files_ignore_symlink() {
     }
 
     let result = run_cli(
-        DynRef::Owned(Box::new(OsFileSystem)),
+        DynRef::Owned(Box::new(OsFileSystem(Some(root_path.clone())))),
         &mut console,
         Args::from(
             [
@@ -1453,6 +1433,37 @@ fn unsupported_file() {
 }
 
 #[test]
+fn unsupported_file_verbose() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let file_path = Path::new("check.txt");
+    fs.insert(file_path.into(), LINT_ERROR.as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("check"),
+                "--verbose",
+                file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+    assert!(result.is_err(), "run_cli returned {result:?}");
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "unsupported_file_verbose",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
 fn suppression_syntax_error() {
     let mut fs = MemoryFileSystem::default();
     let mut console = BufferConsole::default();
@@ -1549,29 +1560,12 @@ import * as something from "../something";
     let result = run_cli(
         DynRef::Borrowed(&mut fs),
         &mut console,
-        Args::from(
-            [
-                ("check"),
-                ("--apply"),
-                file_path.as_os_str().to_str().unwrap(),
-            ]
-            .as_slice(),
-        ),
+        Args::from(["check", "--apply", file_path.as_os_str().to_str().unwrap()].as_slice()),
     );
 
     assert!(result.is_ok(), "run_cli returned {result:?}");
 
-    let mut file = fs
-        .open(file_path)
-        .expect("formatting target file was removed by the CLI");
-
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .expect("failed to read file from memory FS");
-
-    assert_eq!(content, expected);
-
-    drop(file);
+    assert_file_contents(&fs, file_path, expected);
 
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
@@ -1601,17 +1595,7 @@ import * as something from "../something";
 
     assert!(result.is_err(), "run_cli returned {result:?}");
 
-    let mut file = fs
-        .open(file_path)
-        .expect("formatting target file was removed by the CLI");
-
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .expect("failed to read file from memory FS");
-
-    assert_eq!(content, content);
-
-    drop(file);
+    assert_file_contents(&fs, file_path, content);
 
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
@@ -1631,6 +1615,9 @@ fn should_organize_imports_diff_on_check() {
     let content = r#"import { lorem, foom, bar } from "foo";
 import * as something from "../something";
 "#;
+    let expected = r#"import { bar, foom, lorem } from "foo";
+import * as something from "../something";
+"#;
     fs.insert(file_path.into(), content.as_bytes());
 
     let result = run_cli(
@@ -1648,17 +1635,7 @@ import * as something from "../something";
 
     assert!(result.is_ok(), "run_cli returned {result:?}");
 
-    let mut file = fs
-        .open(file_path)
-        .expect("formatting target file was removed by the CLI");
-
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .expect("failed to read file from memory FS");
-
-    assert_eq!(content, content);
-
-    drop(file);
+    assert_file_contents(&fs, file_path, expected);
 
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
@@ -1700,17 +1677,7 @@ import * as something from "../something";
 
     assert!(result.is_ok(), "run_cli returned {result:?}");
 
-    let mut file = fs
-        .open(file_path)
-        .expect("formatting target file was removed by the CLI");
-
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .expect("failed to read file from memory FS");
-
-    assert_eq!(content, content);
-
-    drop(file);
+    assert_file_contents(&fs, file_path, content);
 
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
@@ -1754,17 +1721,7 @@ import * as something from "../something";
 
     assert!(result.is_ok(), "run_cli returned {result:?}");
 
-    let mut file = fs
-        .open(file_path)
-        .expect("formatting target file was removed by the CLI");
-
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .expect("failed to read file from memory FS");
-
-    assert_eq!(content, expected);
-
-    drop(file);
+    assert_file_contents(&fs, file_path, expected);
 
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
@@ -2006,7 +1963,7 @@ fn ignores_file_inside_directory() {
     let mut console = BufferConsole::default();
 
     let git_ignore = r#"
-ignored/
+ignored/**
 "#;
 
     let code1 = r#"array.map(sentence => sentence.split('    ')).flat();"#;
@@ -2044,30 +2001,8 @@ ignored/
         ),
     );
 
-    let mut file = fs
-        .open(file_path1)
-        .expect("formatting target file was removed by the CLI");
-
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .expect("failed to read file from memory FS");
-
-    assert_eq!(content, code1);
-    drop(file);
-
-    let mut file = fs
-        .open(file_path2)
-        .expect("formatting target file was removed by the CLI");
-
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .expect("failed to read file from memory FS");
-
-    assert_eq!(content, code2);
-
-    drop(file);
-
-    content.clear();
+    assert_file_contents(&fs, file_path1, code1);
+    assert_file_contents(&fs, file_path2, code2);
 
     assert!(result.is_err(), "run_cli returned {result:?}");
 
@@ -2214,7 +2149,7 @@ fn check_stdin_apply_successfully() {
 
     let message = console
         .out_buffer
-        .get(0)
+        .first()
         .expect("Console should have written a message");
 
     let content = markup_to_string(markup! {
@@ -2264,7 +2199,7 @@ fn check_stdin_apply_unsafe_successfully() {
 
     let message = console
         .out_buffer
-        .get(0)
+        .first()
         .expect("Console should have written a message");
 
     let content = markup_to_string(markup! {
@@ -2315,7 +2250,7 @@ fn check_stdin_apply_unsafe_only_organize_imports() {
 
     let message = console
         .out_buffer
-        .get(0)
+        .first()
         .expect("Console should have written a message");
 
     let content = markup_to_string(markup! {
@@ -2362,7 +2297,7 @@ fn check_stdin_returns_text_if_content_is_not_changed() {
 
     let message = console
         .out_buffer
-        .get(0)
+        .first()
         .expect("Console should have written a message");
 
     let content = markup_to_string(markup! {

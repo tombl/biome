@@ -1,7 +1,7 @@
 use crate::semantic_services::Semantic;
 use crate::{ast_utils, JsRuleAction};
 use biome_analyze::context::RuleContext;
-use biome_analyze::{declare_rule, ActionCategory, FixKind, Rule, RuleDiagnostic};
+use biome_analyze::{declare_rule, ActionCategory, FixKind, Rule, RuleDiagnostic, RuleSource};
 use biome_console::markup;
 use biome_diagnostics::Applicability;
 use biome_js_factory::make;
@@ -57,6 +57,7 @@ declare_rule! {
     pub(crate) UseNumericLiterals {
         version: "1.0.0",
         name: "useNumericLiterals",
+        source: RuleSource::Eslint("prefer-numeric-literals"),
         recommended: true,
         fix_kind: FixKind::Unsafe,
     }
@@ -122,7 +123,8 @@ impl CallInfo {
         if args.len() != 2 {
             return None;
         }
-        let [Some(text), Some(radix)] = expr.get_arguments_by_index([0, 1]) else {
+        let [Some(text), Some(radix)] = expr.arguments().ok()?.get_arguments_by_index([0, 1])
+        else {
             return None;
         };
         let text = text

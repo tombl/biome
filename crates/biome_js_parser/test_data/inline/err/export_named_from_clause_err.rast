@@ -1,4 +1,5 @@
 JsModule {
+    bom_token: missing (optional),
     interpreter_token: missing (optional),
     directives: JsDirectiveList [],
     items: JsModuleItemList [
@@ -139,8 +140,9 @@ JsModule {
 
 0: JS_MODULE@0..117
   0: (empty)
-  1: JS_DIRECTIVE_LIST@0..0
-  2: JS_MODULE_ITEM_LIST@0..116
+  1: (empty)
+  2: JS_DIRECTIVE_LIST@0..0
+  3: JS_MODULE_ITEM_LIST@0..116
     0: JS_EXPORT@0..27
       0: JS_DECORATOR_LIST@0..0
       1: EXPORT_KW@0..7 "export" [] [Whitespace(" ")]
@@ -226,18 +228,18 @@ JsModule {
         4: JS_MODULE_SOURCE@110..115
           0: JS_STRING_LITERAL@110..115 "\"mod\"" [] []
         5: SEMICOLON@115..116 ";" [] []
-  3: EOF@116..117 "" [Newline("\n")] []
+  4: EOF@116..117 "" [Newline("\n")] []
 --
 export_named_from_clause_err.js:1:10 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  × expected a string literal, or an identifier but instead found ''
+  × Expected a string literal, or an identifier but instead found ''.
   
   > 1 │ export { as b } from "mod";
       │          
     2 │ export { a as 5 } from "mod";
     3 │ export { a b c } from "mod";
   
-  i Expected a string literal, or an identifier here
+  i Expected a string literal, or an identifier here.
   
   > 1 │ export { as b } from "mod";
       │          
@@ -247,7 +249,7 @@ export_named_from_clause_err.js:1:10 parse ━━━━━━━━━━━━�
 --
 export_named_from_clause_err.js:2:15 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  × expected a string literal, or an identifier but instead found '5'
+  × Expected a string literal, or an identifier but instead found '5'.
   
     1 │ export { as b } from "mod";
   > 2 │ export { a as 5 } from "mod";
@@ -255,7 +257,7 @@ export_named_from_clause_err.js:2:15 parse ━━━━━━━━━━━━�
     3 │ export { a b c } from "mod";
     4 │ export { 5 as b } from "mod";
   
-  i Expected a string literal, or an identifier here
+  i Expected a string literal, or an identifier here.
   
     1 │ export { as b } from "mod";
   > 2 │ export { a as 5 } from "mod";
@@ -294,7 +296,7 @@ export_named_from_clause_err.js:3:14 parse ━━━━━━━━━━━━�
 --
 export_named_from_clause_err.js:4:10 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  × expected a string literal, or an identifier but instead found '5 as b'
+  × Expected a string literal, or an identifier but instead found '5 as b'.
   
     2 │ export { a as 5 } from "mod";
     3 │ export { a b c } from "mod";
@@ -302,7 +304,7 @@ export_named_from_clause_err.js:4:10 parse ━━━━━━━━━━━━�
       │          ^^^^^^
     5 │ 
   
-  i Expected a string literal, or an identifier here
+  i Expected a string literal, or an identifier here.
   
     2 │ export { a as 5 } from "mod";
     3 │ export { a b c } from "mod";

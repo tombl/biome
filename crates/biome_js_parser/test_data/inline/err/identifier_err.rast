@@ -1,4 +1,5 @@
 JsModule {
+    bom_token: missing (optional),
     interpreter_token: missing (optional),
     directives: JsDirectiveList [],
     items: JsModuleItemList [
@@ -126,8 +127,9 @@ JsModule {
 
 0: JS_MODULE@0..98
   0: (empty)
-  1: JS_DIRECTIVE_LIST@0..0
-  2: JS_MODULE_ITEM_LIST@0..97
+  1: (empty)
+  2: JS_DIRECTIVE_LIST@0..0
+  3: JS_MODULE_ITEM_LIST@0..97
     0: JS_EXPRESSION_STATEMENT@0..6
       0: JS_BOGUS_EXPRESSION@0..5
         0: JS_BOGUS@0..5
@@ -201,7 +203,7 @@ JsModule {
         0: JS_BOGUS@86..96
           0: IDENT@86..96 "interface" [Newline("\n")] []
       1: SEMICOLON@96..97 ";" [] []
-  3: EOF@97..98 "" [Newline("\n")] []
+  4: EOF@97..98 "" [Newline("\n")] []
 --
 identifier_err.js:1:1 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -215,7 +217,7 @@ identifier_err.js:1:1 parse ━━━━━━━━━━━━━━━━━�
 --
 identifier_err.js:2:6 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  × expected an unary expression but instead found ';'
+  × Expected an unary expression but instead found ';'.
   
     1 │ yield;
   > 2 │ await;
@@ -223,7 +225,7 @@ identifier_err.js:2:6 parse ━━━━━━━━━━━━━━━━━�
     3 │ async function test(await) {}
     4 │ function* test(yield) {}
   
-  i Expected an unary expression here
+  i Expected an unary expression here.
   
     1 │ yield;
   > 2 │ await;

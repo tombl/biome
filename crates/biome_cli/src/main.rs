@@ -9,9 +9,8 @@ use biome_cli::{
     CliSession,
 };
 use biome_console::{markup, ConsoleExt, EnvConsole};
-use biome_diagnostics::{set_bottom_frame, PrintDiagnostic};
+use biome_diagnostics::{set_bottom_frame, Diagnostic, PrintDiagnostic};
 use biome_service::workspace;
-use bpaf::{Args, ParseFailure};
 use std::process::{ExitCode, Termination};
 use tokio::runtime::Runtime;
 
@@ -19,43 +18,40 @@ use tokio::runtime::Runtime;
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(all(
+    any(target_os = "macos", target_os = "linux"),
+    not(target_env = "musl")
+))]
 #[global_allocator]
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
+
+// Jemallocator does not work on aarch64 with musl, so we'll use the system allocator instead
+#[cfg(all(target_env = "musl", target_os = "linux", target_arch = "aarch64"))]
+#[global_allocator]
+static GLOBAL: std::alloc::System = std::alloc::System;
 
 fn main() -> ExitCode {
     setup_panic_handler();
     set_bottom_frame(main as usize);
 
     let mut console = EnvConsole::default();
-    let command = biome_command().run_inner(Args::current_args());
-    match command {
-        Ok(command) => {
-            let color_mode = to_color_mode(command.get_color());
-            console.set_color(color_mode);
+    let command = biome_command().fallback_to_usage().run();
 
-            let is_verbose = command.is_verbose();
-            let result = run_workspace(&mut console, command);
-            match result {
-                Err(termination) => {
-                    console.error(markup! {
-                        {if is_verbose { PrintDiagnostic::verbose(&termination) } else { PrintDiagnostic::simple(&termination) }}
-                    });
-                    termination.report()
-                }
-                Ok(_) => ExitCode::SUCCESS,
-            }
-        }
-        Err(failure) => {
-            return if let ParseFailure::Stdout(help, _) = &failure {
-                console.log(markup! {{help.to_string()}});
-                ExitCode::SUCCESS
+    let color_mode = to_color_mode(command.get_color());
+    console.set_color(color_mode);
+
+    let is_verbose = command.is_verbose();
+    let result = run_workspace(&mut console, command);
+    match result {
+        Err(termination) => {
+            if termination.tags().is_verbose() && is_verbose {
+                console.error(markup! {{PrintDiagnostic::verbose(&termination)}})
             } else {
-                let diagnostic = CliDiagnostic::parse_error_bpaf(failure);
-                console.error(markup! { {PrintDiagnostic::simple(&diagnostic)}});
-                ExitCode::FAILURE
+                console.error(markup! {{PrintDiagnostic::simple(&termination)}})
             }
+            termination.report()
         }
+        Ok(_) => ExitCode::SUCCESS,
     }
 }
 

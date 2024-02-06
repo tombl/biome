@@ -1,5 +1,6 @@
 use crate::JsRuleAction;
 use crate::{semantic_services::Semantic, utils::rename::RenameSymbolExtensions};
+use biome_analyze::RuleSource;
 use biome_analyze::{
     context::RuleContext, declare_rule, ActionCategory, FixKind, Rule, RuleDiagnostic,
 };
@@ -11,9 +12,9 @@ use biome_js_syntax::binding_ext::{
 };
 use biome_js_syntax::declaration_ext::is_in_ambient_context;
 use biome_js_syntax::{
-    AnyJsExpression, JsClassExpression, JsExpressionStatement, JsFileSource, JsForStatement,
-    JsFunctionExpression, JsIdentifierExpression, JsParenthesizedExpression, JsSequenceExpression,
-    JsSyntaxKind, JsSyntaxNode,
+    AnyJsExpression, JsClassExpression, JsFileSource, JsForStatement, JsFunctionExpression,
+    JsIdentifierExpression, JsSequenceExpression, JsSyntaxKind, JsSyntaxNode, TsConditionalType,
+    TsInferType,
 };
 use biome_rowan::{AstNode, BatchMutationExt, SyntaxResult};
 
@@ -98,6 +99,7 @@ declare_rule! {
     pub(crate) NoUnusedVariables {
         version: "1.0.0",
         name: "noUnusedVariables",
+        source: RuleSource::Eslint("no-unused-vars"),
         recommended: false,
         fix_kind: FixKind::Unsafe,
     }
@@ -147,10 +149,11 @@ fn suggestion_for_binding(binding: &AnyJsIdentifierBinding) -> Option<SuggestedF
 fn suggested_fix_if_unused(binding: &AnyJsIdentifierBinding) -> Option<SuggestedFix> {
     match binding.declaration()? {
         // ok to not be used
-        AnyJsBindingDeclaration::TsIndexSignatureParameter(_)
-        | AnyJsBindingDeclaration::TsDeclareFunctionDeclaration(_)
+        AnyJsBindingDeclaration::TsDeclareFunctionDeclaration(_)
         | AnyJsBindingDeclaration::JsClassExpression(_)
-        | AnyJsBindingDeclaration::JsFunctionExpression(_) => None,
+        | AnyJsBindingDeclaration::JsFunctionExpression(_)
+        | AnyJsBindingDeclaration::TsIndexSignatureParameter(_)
+        | AnyJsBindingDeclaration::TsMappedType(_) => None,
 
         // Some parameters are ok to not be used
         AnyJsBindingDeclaration::JsArrowFunctionExpression(_) => {
@@ -197,15 +200,31 @@ fn suggested_fix_if_unused(binding: &AnyJsIdentifierBinding) -> Option<Suggested
         // Bindings under catch are never ok to be unused
         AnyJsBindingDeclaration::JsCatchDeclaration(_)
         // Type parameters are never ok to be unused
-        | AnyJsBindingDeclaration::TsInferType(_)
-        | AnyJsBindingDeclaration::TsMappedType(_)
         | AnyJsBindingDeclaration::TsTypeParameter(_) => Some(SuggestedFix::PrefixUnderscore),
+
+        AnyJsBindingDeclaration::TsInferType(_) => {
+            let binding_name_token = binding.name_token().ok()?;
+            let binding_name = binding_name_token.text_trimmed();
+            let conditional_type = binding.syntax().ancestors().find_map(TsConditionalType::cast)?;
+            let last_binding_name_token = conditional_type.extends_type().ok()?.syntax()
+                .descendants()
+                .filter_map(TsInferType::cast)
+                .filter_map(|infer_type| infer_type.name().ok()?.ident_token().ok())
+                .filter(|infer_type_name| infer_type_name.text_trimmed() == binding_name)
+                .last()?;
+            // We ignore `infer T` that precedes another `infer T`.
+            // Thus, only the last `infer T` is considered.
+            // See https://github.com/biomejs/biome/issues/565
+            if binding_name_token.text_range() == last_binding_name_token.text_range() {
+                Some(SuggestedFix::NoSuggestion)
+            } else {
+                None
+            }
+        }
 
         // Bindings under unknown parameter are never ok to be unused
         AnyJsBindingDeclaration::JsBogusParameter(_)
         // Imports are never ok to be unused
-        | AnyJsBindingDeclaration::JsImportDefaultClause(_)
-        | AnyJsBindingDeclaration::JsImportNamespaceClause(_)
         | AnyJsBindingDeclaration::JsShorthandNamedImportSpecifier(_)
         | AnyJsBindingDeclaration::JsNamedImportSpecifier(_)
         | AnyJsBindingDeclaration::JsBogusNamedImportSpecifier(_)
@@ -298,7 +317,11 @@ impl Rule for NoUnusedVariables {
                 Some(ref_parent)
             })
             .all(|ref_parent| {
-                if declaration.kind() == JsSyntaxKind::TS_MAPPED_TYPE {
+                if matches!(
+                    declaration.kind(),
+                    JsSyntaxKind::JS_ARROW_FUNCTION_EXPRESSION | JsSyntaxKind::TS_MAPPED_TYPE
+                ) {
+                    // Expression in an return position inside an arrow function expression are used.
                     // Type parameters declared in mapped types are only used in the mapped type.
                     return false;
                 }
@@ -401,28 +424,30 @@ fn is_unused_expression(expr: &JsSyntaxNode) -> SyntaxResult<bool> {
     // We use range as a way to identify nodes without owning them.
     let mut previous = expr.text_trimmed_range();
     for parent in expr.ancestors().skip(1) {
-        if JsExpressionStatement::can_cast(parent.kind()) {
-            return Ok(true);
-        }
-        if JsParenthesizedExpression::can_cast(parent.kind()) {
-            previous = parent.text_trimmed_range();
-            continue;
-        }
-        if let Some(seq_expr) = JsSequenceExpression::cast_ref(&parent) {
-            // If the expression is not the righmost node in a comma sequence
-            if seq_expr.left()?.range() == previous {
+        match parent.kind() {
+            JsSyntaxKind::JS_EXPRESSION_STATEMENT => return Ok(true),
+            JsSyntaxKind::JS_PARENTHESIZED_EXPRESSION => {
+                previous = parent.text_trimmed_range();
+                continue;
+            }
+            JsSyntaxKind::JS_SEQUENCE_EXPRESSION => {
+                let seq_expr = JsSequenceExpression::unwrap_cast(parent);
+                // If the expression is not the rightmost node in a comma sequence
+                if seq_expr.left()?.range() == previous {
+                    return Ok(true);
+                }
+                previous = seq_expr.range();
+                continue;
+            }
+            JsSyntaxKind::JS_FOR_STATEMENT => {
+                let for_stmt = JsForStatement::unwrap_cast(parent);
+                if let Some(for_test) = for_stmt.test() {
+                    return Ok(for_test.range() != previous);
+                }
                 return Ok(true);
             }
-            previous = seq_expr.range();
-            continue;
+            _ => break,
         }
-        if let Some(for_stmt) = JsForStatement::cast(parent) {
-            if let Some(for_test) = for_stmt.test() {
-                return Ok(for_test.range() != previous);
-            }
-            return Ok(true);
-        }
-        break;
     }
     Ok(false)
 }

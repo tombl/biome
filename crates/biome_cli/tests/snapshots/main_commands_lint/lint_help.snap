@@ -7,7 +7,7 @@ expression: content
 ```block
 Run various checks on a set of files.
 
-Usage: lint [--apply] [--apply-unsafe] [PATH]...
+Usage: lint [--apply] [--apply-unsafe] [--changed] [--since=REF] [PATH]...
 
 Set of properties to integrate Biome with a VCS software.
         --vcs-client-kind=<git>  The kind of client.
@@ -19,6 +19,7 @@ Set of properties to integrate Biome with a VCS software.
                               If Biome can't find the configuration, it will attempt to use the current
                               working directory. If no current working directory can't be found, Biome
                               won't use the VCS integration, and a diagnostic will be emitted
+        --vcs-default-branch=BRANCH  The main branch of the project
 
 The configuration of the filesystem
         --files-max-size=NUMBER  The maximum allowed size for source code files in bytes. Files above
@@ -31,7 +32,7 @@ Global options applied to all commands
                               "force" forces the formatting of markup using ANSI even if the console
                               output is determined to be incompatible
         --use-server          Connect to a running instance of the Biome daemon server.
-        --verbose             Print additional verbose advices on diagnostics
+        --verbose             Print additional diagnostics, and some diagnostics show more information.
         --config-path=PATH    Set the filesystem path to the directory of the biome.json configuration
                               file
         --max-diagnostics=NUMBER  Cap the amount of diagnostics displayed.
@@ -46,18 +47,26 @@ Global options applied to all commands
                               [default: none]
         --log-kind=<pretty|compact|json>  How the log should look like.
                               [default: pretty]
+        --diagnostic-level=<info|warn|error>  The level of diagnostics to show. In order, from the lowest
+                              to the most important: info, warn, error. Passing `--diagnostic-level=error`
+                              will cause Biome to print only diagnostics that contain only errors.
+                              [default: info]
 
 Available positional items:
     PATH                      Single file, single path or list of paths
 
 Available options:
-        --apply               Apply safe fixes, formatting
+        --apply               Apply safe fixes, formatting and import sorting
         --apply-unsafe        Apply safe fixes and unsafe fixes, formatting and import sorting
         --stdin-file-path=PATH  Use this option when you want to format code piped from `stdin`, and
                               print the output to `stdout`.
                               The file doesn't need to exist on disk, what matters is the extension of
                               the file. Based on the extension, Biome knows how to lint the code.
                               Example: `echo 'let a;' | biome lint --stdin-file-path=file.js`
+        --changed             When set to true, only the files that have been changed compared to your
+                              `defaultBranch` configuration will be linted.
+        --since=REF           Use this to specify the base branch to compare against when you're using
+                              the --changed flag and the `defaultBranch` is not set in your biome.json
     -h, --help                Prints help information
 
 ```

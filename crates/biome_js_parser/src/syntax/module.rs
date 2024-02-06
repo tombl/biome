@@ -20,7 +20,7 @@ use crate::syntax::js_parse_error::{
     decorators_not_allowed, duplicate_assertion_keys_error, expected_binding, expected_declaration,
     expected_export_clause, expected_export_default_declaration, expected_export_name_specifier,
     expected_expression, expected_identifier, expected_literal_export_name, expected_module_source,
-    expected_named_import, expected_named_import_specifier, expected_statement,
+    expected_named_import_specifier, expected_namespace_or_named_import, expected_statement,
 };
 use crate::syntax::stmt::{parse_statement, semi, StatementContext, STMT_RECOVERY_SET};
 use crate::syntax::typescript::ts_parse_error::ts_only_syntax_error;
@@ -29,7 +29,7 @@ use crate::syntax::typescript::{
     parse_ts_interface_declaration,
 };
 use crate::JsSyntaxFeature::TypeScript;
-use crate::{Absent, JsParser, ParseRecovery, ParsedSyntax, Present};
+use crate::{Absent, JsParser, ParseRecoveryTokenSet, ParsedSyntax, Present};
 use biome_js_syntax::JsSyntaxKind::*;
 use biome_js_syntax::{JsSyntaxKind, TextRange, T};
 use biome_parser::diagnostic::{expected_any, expected_node};
@@ -39,6 +39,7 @@ use biome_parser::ParserProgress;
 use rustc_hash::FxHashMap;
 
 use super::auxiliary::{is_nth_at_declaration_clause, parse_declaration_clause};
+use super::js_parse_error::{expected_named_import, expected_namespace_import};
 
 // test js module
 // import a from "b";
@@ -98,9 +99,9 @@ pub(crate) fn parse_module_item_list(
 
         let module_item = parse_module_item(p);
 
-        let recovered = module_item.or_recover(
+        let recovered = module_item.or_recover_with_token_set(
             p,
-            &ParseRecovery::new(JS_BOGUS_STATEMENT, recovery_set),
+            &ParseRecoveryTokenSet::new(JS_BOGUS_STATEMENT, recovery_set),
             expected_statement,
         );
 
@@ -240,8 +241,8 @@ pub(crate) fn parse_import_or_import_equals_declaration(p: &mut JsParser) -> Par
             expected_any(
                 &["default import", "namespace import", "named import"],
                 range,
+                p,
             )
-            .into_diagnostic(p)
         });
 
         let end = p.cur_range().start();
@@ -271,9 +272,22 @@ fn parse_import_clause(p: &mut JsParser) -> ParsedSyntax {
     // import type foo from "./mod";
     // import type * as foo2 from "./mod";
     // import type { foo3 } from "mod";
-    let is_typed = p.at(T![type])
-        && (matches!(p.nth(1), T![*] | T!['{'])
-            || (is_nth_at_identifier_binding(p, 1) && !p.nth_at(1, T![from])));
+    // import type from from "./mod";
+    let is_typed = 'is_typed: {
+        if !p.at(T![type]) {
+            break 'is_typed false;
+        }
+
+        if matches!(p.nth(1), T![*] | T!['{']) {
+            break 'is_typed true;
+        }
+
+        if !is_nth_at_identifier_binding(p, 1) {
+            break 'is_typed false;
+        }
+
+        !p.nth_at(1, T![from]) || p.nth_at(2, T![from])
+    };
 
     if is_typed {
         p.eat(T![type]);
@@ -283,8 +297,10 @@ fn parse_import_clause(p: &mut JsParser) -> ParsedSyntax {
         T![*] => parse_import_namespace_clause_rest(p, m),
         T!['{'] => parse_import_named_clause_rest(p, m),
         _ if is_at_identifier_binding(p) => {
+            let default_specifier = p.start();
             parse_identifier_binding(p).unwrap();
-            parse_import_default_or_named_clause_rest(p, m, is_typed)
+            default_specifier.complete(p, JS_DEFAULT_IMPORT_SPECIFIER);
+            parse_import_default_clauses_rest(p, m, is_typed)
         }
         _ => {
             // SAFETY: Safe because the parser only eats the "type" keyword if it's followed by
@@ -304,47 +320,42 @@ fn parse_import_clause(p: &mut JsParser) -> ParsedSyntax {
     }
 }
 
-/// Parses the rest of an import named or default clause.
+// test js import_default_clauses
+// import e, { f } from "b";
+
+// import g, * as lorem from "c";
+/// Parses the rest of a default clause or default named clause.
 /// Rest meaning, everything after `type binding`
-fn parse_import_default_or_named_clause_rest(
+fn parse_import_default_clauses_rest(
     p: &mut JsParser,
     m: Marker,
     is_typed: bool,
 ) -> CompletedMarker {
-    match p.cur() {
-        T![,] | T!['{'] => {
+    let syntax_type = match p.cur() {
+        T![,] | T!['{'] | T![*] => {
             p.expect(T![,]);
-
-            let default_specifier = m.complete(p, JS_DEFAULT_IMPORT_SPECIFIER);
-            let default_start = default_specifier.range(p).start();
-
-            let named_clause = default_specifier.precede(p);
-
-            parse_named_import(p).or_add_diagnostic(p, expected_named_import);
-
+            match p.cur() {
+                T![*] => parse_namespace_import_specifier(p),
+                _ => parse_named_import_specifier_list(p),
+            }
+            .or_add_diagnostic(p, expected_namespace_or_named_import);
             if is_typed {
+                let start = m.start();
                 let end = p.last_end().unwrap_or_else(|| p.cur_range().start());
 
                 // test_err ts ts_typed_default_import_with_named
                 // import type A, { B, C } from './a';
                 p.error(p.err_builder("A type-only import can specify a default import or named bindings, but not both.",
-                    default_start..end,))
+                    start..end,))
             }
-
-            p.expect(T![from]);
-            parse_module_source(p).or_add_diagnostic(p, expected_module_source);
-            parse_import_assertion(p).ok();
-
-            named_clause.complete(p, JS_IMPORT_NAMED_CLAUSE)
+            JS_IMPORT_COMBINED_CLAUSE
         }
-        _ => {
-            p.expect(T![from]);
-            parse_module_source(p).or_add_diagnostic(p, expected_module_source);
-            parse_import_assertion(p).ok();
-
-            m.complete(p, JS_IMPORT_DEFAULT_CLAUSE)
-        }
-    }
+        _ => JS_IMPORT_DEFAULT_CLAUSE,
+    };
+    p.expect(T![from]);
+    parse_module_source(p).or_add_diagnostic(p, expected_module_source);
+    parse_import_assertion(p).ok();
+    m.complete(p, syntax_type)
 }
 
 // test js import_bare_clause
@@ -361,10 +372,7 @@ fn parse_import_bare_clause(p: &mut JsParser) -> ParsedSyntax {
 // test js import_decl
 // import * as foo from "bla";
 fn parse_import_namespace_clause_rest(p: &mut JsParser, m: Marker) -> CompletedMarker {
-    p.expect(T![*]);
-
-    p.expect(T![as]);
-    parse_binding(p).or_add_diagnostic(p, expected_binding);
+    parse_namespace_import_specifier(p).or_add_diagnostic(p, expected_namespace_import);
     p.expect(T![from]);
     parse_module_source(p).or_add_diagnostic(p, expected_module_source);
     parse_import_assertion(p).ok();
@@ -375,32 +383,14 @@ fn parse_import_namespace_clause_rest(p: &mut JsParser, m: Marker) -> CompletedM
 // test js import_named_clause
 // import {} from "a";
 // import { a, b, c, } from "b";
-// import e, { f } from "b";
-// import g, * as lorem from "c";
 // import { f as x, default as w, "a-b-c" as y } from "b";
 fn parse_import_named_clause_rest(p: &mut JsParser, m: Marker) -> CompletedMarker {
-    parse_default_import_specifier(p).ok();
-    parse_named_import(p).or_add_diagnostic(p, expected_named_import);
+    parse_named_import_specifier_list(p).or_add_diagnostic(p, expected_named_import);
     p.expect(T![from]);
     parse_module_source(p).or_add_diagnostic(p, expected_module_source);
     parse_import_assertion(p).ok();
 
     m.complete(p, JS_IMPORT_NAMED_CLAUSE)
-}
-
-fn parse_default_import_specifier(p: &mut JsParser) -> ParsedSyntax {
-    parse_binding(p).map(|binding| {
-        let m = binding.precede(p);
-        p.expect(T![,]);
-        m.complete(p, JS_DEFAULT_IMPORT_SPECIFIER)
-    })
-}
-
-fn parse_named_import(p: &mut JsParser) -> ParsedSyntax {
-    match p.cur() {
-        T![*] => parse_namespace_import_specifier(p),
-        _ => parse_named_import_specifier_list(p),
-    }
 }
 
 fn parse_namespace_import_specifier(p: &mut JsParser) -> ParsedSyntax {
@@ -445,9 +435,9 @@ impl ParseSeparatedList for NamedImportSpecifierList {
     }
 
     fn recover(&mut self, p: &mut JsParser, parsed_element: ParsedSyntax) -> RecoveryResult {
-        parsed_element.or_recover(
+        parsed_element.or_recover_with_token_set(
             p,
-            &ParseRecovery::new(
+            &ParseRecoveryTokenSet::new(
                 JS_BOGUS_NAMED_IMPORT_SPECIFIER,
                 STMT_RECOVERY_SET.union(token_set![T![,], T!['}'], T![;]]),
             )
@@ -619,14 +609,14 @@ impl ParseSeparatedList for ImportAssertionList {
     }
 
     fn recover(&mut self, p: &mut JsParser, parsed_element: ParsedSyntax) -> RecoveryResult {
-        parsed_element.or_recover(
+        parsed_element.or_recover_with_token_set(
             p,
-            &ParseRecovery::new(
+            &ParseRecoveryTokenSet::new(
                 JS_BOGUS_IMPORT_ASSERTION_ENTRY,
                 STMT_RECOVERY_SET.union(token_set![T![,], T!['}']]),
             )
             .enable_recovery_on_line_break(),
-            |p, range| expected_node("import assertion entry", range).into_diagnostic(p),
+            |p, range| expected_node("import assertion entry", range, p),
         )
     }
 
@@ -662,9 +652,11 @@ fn parse_import_assertion_entry(
             p.bump_remap(T![ident]);
         }
         T![:] => {
-            p.error(
-                expected_any(&["identifier", "string literal"], p.cur_range()).into_diagnostic(p),
-            );
+            p.error(expected_any(
+                &["identifier", "string literal"],
+                p.cur_range(),
+                p,
+            ));
         }
         _ => {
             m.abandon(p);
@@ -849,9 +841,9 @@ impl ParseSeparatedList for ExportNamedSpecifierList {
     }
 
     fn recover(&mut self, p: &mut JsParser, parsed_element: ParsedSyntax) -> RecoveryResult {
-        parsed_element.or_recover(
+        parsed_element.or_recover_with_token_set(
             p,
-            &ParseRecovery::new(
+            &ParseRecoveryTokenSet::new(
                 JS_BOGUS,
                 STMT_RECOVERY_SET.union(token_set![T![,], T!['}'], T![;]]),
             )
@@ -1140,9 +1132,9 @@ impl ParseSeparatedList for ExportNamedFromSpecifierList {
     }
 
     fn recover(&mut self, p: &mut JsParser, parsed_element: ParsedSyntax) -> RecoveryResult {
-        parsed_element.or_recover(
+        parsed_element.or_recover_with_token_set(
             p,
-            &ParseRecovery::new(
+            &ParseRecoveryTokenSet::new(
                 JS_BOGUS,
                 STMT_RECOVERY_SET.union(token_set![T![,], T!['}'], T![;]]),
             )
@@ -1293,9 +1285,7 @@ fn parse_export_default_clause(p: &mut JsParser) -> ParsedSyntax {
         if let Some(existing_default_item) =
             p.state().default_item.as_ref().filter(|_| p.is_module())
         {
-            if existing_default_item.kind.is_overload()
-                && (default_item_kind.is_overload() || default_item_kind.is_function_declaration())
-            {
+            if existing_default_item.kind.is_mergeable(&default_item_kind) {
                 // It's ok to have multiple overload declarations and an implementation.
                 // This check won't catch if there are multiple implementations for the same overload
                 // or if the overloads define different functions.
@@ -1305,8 +1295,8 @@ fn parse_export_default_clause(p: &mut JsParser) -> ParsedSyntax {
                         "Illegal duplicate default export declarations",
                         clause.range(p),
                     )
-                    .detail(clause.range(p), "multiple default exports are erroneous")
-                    .detail(
+                    .with_detail(clause.range(p), "multiple default exports are erroneous")
+                    .with_detail(
                         existing_default_item.range.clone(),
                         "the module's default export is first defined here",
                     );
@@ -1343,7 +1333,7 @@ fn parse_class_export_default_declaration_clause(
 
     (
         Present(m.complete(p, JS_EXPORT_DEFAULT_DECLARATION_CLAUSE)),
-        ExportDefaultItemKind::Declaration,
+        ExportDefaultItemKind::ClassDeclaration,
     )
 }
 

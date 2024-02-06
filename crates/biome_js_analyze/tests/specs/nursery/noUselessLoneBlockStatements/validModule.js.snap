@@ -3,7 +3,7 @@ source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: validModule.js
 ---
 # Input
-```js
+```jsx
 export {}
 
 while (foo) {
@@ -57,6 +57,12 @@ function g() {
 
 {
  function foo() {}
+}
+
+if(x) {
+  x += 1;
+} else {
+  x += 2;
 }
 ```
 

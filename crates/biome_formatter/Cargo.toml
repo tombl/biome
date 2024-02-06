@@ -8,24 +8,26 @@ keywords.workspace   = true
 license.workspace    = true
 name                 = "biome_formatter"
 repository.workspace = true
-version              = "0.2.0"
+version              = "0.4.0"
 
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-biome_console     = { workspace = true }
-biome_diagnostics = { workspace = true }
-biome_rowan       = { workspace = true }
-cfg-if            = "1.0.0"
-countme           = { workspace = true }
-drop_bomb         = "0.1.5"
-indexmap          = { workspace = true }
-rustc-hash        = { workspace = true }
-schemars          = { workspace = true, optional = true }
-serde             = { workspace = true, features = ["derive"], optional = true }
-tracing           = { workspace = true }
-unicode-width     = "0.1.9"
+biome_console            = { workspace = true }
+biome_deserialize        = { workspace = true }
+biome_deserialize_macros = { workspace = true }
+biome_diagnostics        = { workspace = true }
+biome_rowan              = { workspace = true }
+cfg-if                   = "1.0.0"
+countme                  = { workspace = true }
+drop_bomb                = "0.1.5"
+indexmap                 = { workspace = true }
+rustc-hash               = { workspace = true }
+schemars                 = { workspace = true, optional = true }
+serde                    = { workspace = true, features = ["derive"], optional = true }
+tracing                  = { workspace = true }
+unicode-width            = "0.1.9"
 
 [dev-dependencies]
 biome_js_parser = { path = "../biome_js_parser" }
@@ -38,3 +40,6 @@ serde = ["dep:serde", "schemars", "biome_rowan/serde"]
 # cargo-workspaces metadata
 [package.metadata.workspaces]
 independent = true
+
+[lints]
+workspace = true

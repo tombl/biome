@@ -17,7 +17,7 @@ use crate::syntax::typescript::{
     expect_ts_type_list, parse_ts_identifier_binding, parse_ts_implements_clause, parse_ts_name,
     parse_ts_type, parse_ts_type_parameters, TypeContext, TypeMembers,
 };
-use crate::{syntax, Absent, JsParser, ParseRecovery, ParsedSyntax, Present};
+use crate::{syntax, Absent, JsParser, ParseRecoveryTokenSet, ParsedSyntax, Present};
 use biome_js_syntax::{JsSyntaxKind::*, *};
 use biome_parser::diagnostic::expected_token;
 use biome_parser::parse_lists::{ParseNodeList, ParseSeparatedList};
@@ -87,9 +87,9 @@ impl ParseSeparatedList for TsEnumMembersList {
     }
 
     fn recover(&mut self, p: &mut JsParser, parsed_element: ParsedSyntax) -> RecoveryResult {
-        parsed_element.or_recover(
+        parsed_element.or_recover_with_token_set(
             p,
-            &ParseRecovery::new(
+            &ParseRecoveryTokenSet::new(
                 JS_BOGUS_MEMBER,
                 STMT_RECOVERY_SET.union(token_set![JsSyntaxKind::IDENT, T![,], T!['}']]),
             )
@@ -207,7 +207,13 @@ pub(crate) fn parse_ts_type_alias_declaration(p: &mut JsParser) -> ParsedSyntax 
     p.expect(T![type]);
     parse_ts_identifier_binding(p, super::TsIdentifierContext::Type)
         .or_add_diagnostic(p, expected_identifier);
-    parse_ts_type_parameters(p, TypeContext::default().and_allow_in_out_modifier(true)).ok();
+    parse_ts_type_parameters(
+        p,
+        TypeContext::default()
+            .and_allow_in_out_modifier(true)
+            .and_type_or_interface_declaration(true),
+    )
+    .ok();
     p.expect(T![=]);
     parse_ts_type(p, TypeContext::default()).or_add_diagnostic(p, expected_ts_type);
 
@@ -301,7 +307,13 @@ pub(crate) fn parse_ts_interface_declaration(p: &mut JsParser) -> ParsedSyntax {
     p.expect(T![interface]);
     parse_ts_identifier_binding(p, super::TsIdentifierContext::Type)
         .or_add_diagnostic(p, expected_identifier);
-    parse_ts_type_parameters(p, TypeContext::default().and_allow_in_out_modifier(true)).ok();
+    parse_ts_type_parameters(
+        p,
+        TypeContext::default()
+            .and_allow_in_out_modifier(true)
+            .and_type_or_interface_declaration(true),
+    )
+    .ok();
     eat_interface_heritage_clause(p);
     p.expect(T!['{']);
     TypeMembers::default().parse_list(p);
@@ -329,7 +341,7 @@ fn eat_interface_heritage_clause(p: &mut JsParser) {
             if let Some(first_extends) = first_extends.as_ref() {
                 p.error(
                     p.err_builder("'extends' clause already seen.", extends.range(p))
-                        .detail(first_extends.range(p), "first 'extends' clause"),
+                        .with_detail(first_extends.range(p), "first 'extends' clause"),
                 )
             } else {
                 first_extends = Some(extends);
@@ -363,34 +375,17 @@ fn parse_ts_extends_clause(p: &mut JsParser) -> ParsedSyntax {
 }
 
 #[inline]
-pub(crate) fn is_at_any_ts_namespace_declaration(p: &mut JsParser) -> bool {
-    if p.has_nth_preceding_line_break(1) {
-        return false;
-    }
-
-    if matches!(p.cur(), T![namespace] | T![module]) {
-        return is_nth_at_identifier(p, 1) || p.nth_at(1, JS_STRING_LITERAL);
-    }
-
-    if p.at(T![global]) {
-        return p.nth_at(1, T!['{']);
-    }
-
-    false
-}
-
-#[inline]
 pub(crate) fn is_nth_at_any_ts_namespace_declaration(p: &mut JsParser, n: usize) -> bool {
+    if p.nth_at(n, T![global]) {
+        return p.nth_at(n + 1, T!['{']);
+    }
+
     if p.has_nth_preceding_line_break(n + 1) {
         return false;
     }
 
     if matches!(p.nth(n), T![namespace] | T![module]) {
         return is_nth_at_identifier(p, n + 1) || p.nth_at(n + 1, JS_STRING_LITERAL);
-    }
-
-    if p.nth_at(n, T![global]) {
-        return p.nth_at(n + 1, T!['{']);
     }
 
     false
@@ -509,6 +504,13 @@ fn parse_ts_module_block(p: &mut JsParser) -> ParsedSyntax {
 //      let VERSION: string;
 //  }
 // }
+// declare module "foo" {
+//  global
+//  { }
+// }
+// declare global {}
+// declare global
+// { }
 //
 // test ts ts_global_variable
 // let global;

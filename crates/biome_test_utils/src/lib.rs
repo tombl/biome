@@ -7,7 +7,7 @@ use biome_json_parser::{JsonParserOptions, ParseDiagnostic};
 use biome_rowan::{SyntaxKind, SyntaxNode, SyntaxSlot};
 use biome_service::configuration::to_analyzer_rules;
 use biome_service::settings::{Language, WorkspaceSettings};
-use biome_service::Configuration;
+use biome_service::PartialConfiguration;
 use json_comments::StripComments;
 use similar::TextDiff;
 use std::ffi::{c_int, OsStr};
@@ -29,15 +29,19 @@ pub fn create_analyzer_options(
     input_file: &Path,
     diagnostics: &mut Vec<String>,
 ) -> AnalyzerOptions {
-    let mut options = AnalyzerOptions::default();
+    let mut options = AnalyzerOptions {
+        configuration: Default::default(),
+        file_path: input_file.to_path_buf(),
+    };
     // We allow a test file to configure its rule using a special
     // file with the same name as the test but with extension ".options.json"
     // that configures that specific rule.
     let options_file = input_file.with_extension("options.json");
     if let Ok(json) = std::fs::read_to_string(options_file.clone()) {
-        let deserialized = biome_deserialize::json::deserialize_from_json_str::<Configuration>(
+        let deserialized = biome_deserialize::json::deserialize_from_json_str::<PartialConfiguration>(
             json.as_str(),
             JsonParserOptions::default(),
+            "",
         );
         if deserialized.has_errors() {
             diagnostics.extend(
@@ -55,16 +59,18 @@ pub fn create_analyzer_options(
             );
             None
         } else {
-            let configuration = deserialized.into_deserialized();
+            let configuration = deserialized.into_deserialized().unwrap_or_default();
             let mut settings = WorkspaceSettings::default();
-            settings.merge_with_configuration(configuration).unwrap();
+            settings
+                .merge_with_configuration(configuration, None, None, &[])
+                .unwrap();
             let configuration = AnalyzerConfiguration {
                 rules: to_analyzer_rules(&settings, input_file),
                 globals: vec![],
             };
             options = AnalyzerOptions {
                 configuration,
-                ..AnalyzerOptions::default()
+                ..options
             };
 
             Some(json)
@@ -204,9 +210,10 @@ pub fn write_analyzer_snapshot(
     input_code: &str,
     diagnostics: &[String],
     code_fixes: &[String],
+    markdown_language: &str,
 ) {
     writeln!(snapshot, "# Input").unwrap();
-    writeln!(snapshot, "```js").unwrap();
+    writeln!(snapshot, "```{markdown_language}").unwrap();
     writeln!(snapshot, "{}", input_code).unwrap();
     writeln!(snapshot, "```").unwrap();
     writeln!(snapshot).unwrap();

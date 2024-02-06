@@ -14,6 +14,7 @@ expression: snapshot
 
 ```
 JsonRoot {
+    bom_token: missing (optional),
     value: JsonBogusValue {
         items: [
             ERROR_TOKEN@0..8 "\"\\UA66D\"" [] [],
@@ -27,9 +28,10 @@ JsonRoot {
 
 ```
 0: JSON_ROOT@0..8
-  0: JSON_BOGUS_VALUE@0..8
+  0: (empty)
+  1: JSON_BOGUS_VALUE@0..8
     0: ERROR_TOKEN@0..8 "\"\\UA66D\"" [] []
-  1: EOF@8..8 "" [] []
+  2: EOF@8..8 "" [] []
 
 ```
 
@@ -38,12 +40,12 @@ JsonRoot {
 ```
 string_unicode_CapitalU.json:1:1 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  × expected an array, an object, or a literal but instead found '"\UA66D"'
+  × Expected an array, an object, or a literal but instead found '"\UA66D"'.
   
   > 1 │ "\UA66D"
       │ ^^^^^^^^
   
-  i Expected an array, an object, or a literal here
+  i Expected an array, an object, or a literal here.
   
   > 1 │ "\UA66D"
       │ ^^^^^^^^

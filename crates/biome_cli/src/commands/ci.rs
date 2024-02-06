@@ -1,14 +1,15 @@
+use crate::changed::get_changed_files;
 use crate::cli_options::CliOptions;
-use crate::configuration::LoadedConfiguration;
-use crate::vcs::store_path_to_ignore_from_vcs;
-use crate::{
-    configuration::load_configuration, execute_mode, setup_cli_subscriber, CliDiagnostic,
-    CliSession, Execution, TraversalMode,
+use crate::commands::validate_configuration_diagnostics;
+use crate::{execute_mode, setup_cli_subscriber, CliDiagnostic, CliSession, Execution};
+use biome_deserialize::Merge;
+use biome_service::configuration::organize_imports::PartialOrganizeImports;
+use biome_service::configuration::{
+    load_configuration, LoadedConfiguration, PartialFormatterConfiguration,
+    PartialLinterConfiguration,
 };
-use biome_service::configuration::organize_imports::OrganizeImports;
-use biome_service::configuration::{FormatterConfiguration, LinterConfiguration};
 use biome_service::workspace::UpdateSettingsParams;
-use biome_service::{Configuration, MergeWith};
+use biome_service::PartialConfiguration;
 use std::ffi::OsString;
 
 pub(crate) struct CiCommandPayload {
@@ -16,21 +17,30 @@ pub(crate) struct CiCommandPayload {
     pub(crate) linter_enabled: Option<bool>,
     pub(crate) organize_imports_enabled: Option<bool>,
     pub(crate) paths: Vec<OsString>,
-    pub(crate) rome_configuration: Configuration,
+    pub(crate) configuration: PartialConfiguration,
     pub(crate) cli_options: CliOptions,
+    pub(crate) changed: bool,
+    pub(crate) since: Option<String>,
 }
 
 /// Handler for the "ci" command of the Biome CLI
-pub(crate) fn ci(mut session: CliSession, payload: CiCommandPayload) -> Result<(), CliDiagnostic> {
+pub(crate) fn ci(session: CliSession, mut payload: CiCommandPayload) -> Result<(), CliDiagnostic> {
     setup_cli_subscriber(
         payload.cli_options.log_level.clone(),
         payload.cli_options.log_kind.clone(),
     );
 
-    let loaded_configuration =
-        load_configuration(&mut session, &payload.cli_options)?.with_file_path();
+    let loaded_configuration = load_configuration(
+        &session.app.fs,
+        payload.cli_options.as_configuration_base_path(),
+    )?;
 
-    loaded_configuration.check_for_errors(session.app.console, payload.cli_options.verbose)?;
+    validate_configuration_diagnostics(
+        &loaded_configuration,
+        session.app.console,
+        payload.cli_options.verbose,
+    )?;
+
     let LoadedConfiguration {
         mut configuration,
         directory_path: configuration_path,
@@ -38,7 +48,7 @@ pub(crate) fn ci(mut session: CliSession, payload: CiCommandPayload) -> Result<(
     } = loaded_configuration;
     let formatter = configuration
         .formatter
-        .get_or_insert_with(FormatterConfiguration::default);
+        .get_or_insert_with(PartialFormatterConfiguration::default);
 
     if payload.formatter_enabled.is_some() {
         formatter.enabled = payload.formatter_enabled;
@@ -46,7 +56,7 @@ pub(crate) fn ci(mut session: CliSession, payload: CiCommandPayload) -> Result<(
 
     let linter = configuration
         .linter
-        .get_or_insert_with(LinterConfiguration::default);
+        .get_or_insert_with(PartialLinterConfiguration::default);
 
     if payload.linter_enabled.is_some() {
         linter.enabled = payload.linter_enabled;
@@ -54,7 +64,7 @@ pub(crate) fn ci(mut session: CliSession, payload: CiCommandPayload) -> Result<(
 
     let organize_imports = configuration
         .organize_imports
-        .get_or_insert_with(OrganizeImports::default);
+        .get_or_insert_with(PartialOrganizeImports::default);
 
     if payload.organize_imports_enabled.is_some() {
         organize_imports.enabled = payload.organize_imports_enabled;
@@ -68,33 +78,33 @@ pub(crate) fn ci(mut session: CliSession, payload: CiCommandPayload) -> Result<(
         return Err(CliDiagnostic::incompatible_end_configuration("Formatter, linter and organize imports are disabled, can't perform the command. This is probably and error."));
     }
 
-    configuration.merge_with(payload.rome_configuration.files);
-    configuration.merge_with(payload.rome_configuration.vcs);
-    configuration.merge_with_if(
-        payload.rome_configuration.formatter,
-        !configuration.is_formatter_disabled(),
-    );
-    configuration.merge_with_if(
-        payload.rome_configuration.organize_imports,
-        !configuration.is_organize_imports_disabled(),
-    );
+    configuration.merge_with(payload.configuration);
 
     // check if support of git ignore files is enabled
     let vcs_base_path = configuration_path.or(session.app.fs.working_directory());
-    store_path_to_ignore_from_vcs(
-        &mut session,
-        &mut configuration,
-        vcs_base_path,
-        &payload.cli_options,
-    )?;
+    let (vcs_base_path, gitignore_matches) =
+        configuration.retrieve_gitignore_matches(&session.app.fs, vcs_base_path.as_deref())?;
+
+    if payload.since.is_some() && !payload.changed {
+        return Err(CliDiagnostic::incompatible_arguments("since", "changed"));
+    }
+
+    if payload.changed {
+        payload.paths = get_changed_files(&session.app.fs, &configuration, payload.since)?;
+    }
 
     session
         .app
         .workspace
-        .update_settings(UpdateSettingsParams { configuration })?;
+        .update_settings(UpdateSettingsParams {
+            configuration,
+            working_directory: session.app.fs.working_directory(),
+            vcs_base_path,
+            gitignore_matches,
+        })?;
 
     execute_mode(
-        Execution::new(TraversalMode::CI),
+        Execution::new_ci(),
         session,
         &payload.cli_options,
         payload.paths,

@@ -1,21 +1,22 @@
 use crate::react::hooks::*;
 use crate::semantic_services::Semantic;
+use biome_analyze::RuleSource;
 use biome_analyze::{context::RuleContext, declare_rule, Rule, RuleDiagnostic};
 use biome_console::markup;
-use biome_deserialize::json::{has_only_known_keys, VisitJsonNode};
-use biome_deserialize::{DeserializationDiagnostic, VisitNode};
+use biome_deserialize::non_empty;
+use biome_deserialize_macros::Deserializable;
 use biome_js_semantic::{Capture, SemanticModel};
 use biome_js_syntax::{
-    binding_ext::AnyJsBindingDeclaration, JsCallExpression, JsStaticMemberExpression, JsSyntaxKind,
-    JsSyntaxNode, JsVariableDeclaration, TextRange,
+    binding_ext::AnyJsBindingDeclaration, JsCallExpression, JsSyntaxKind, JsSyntaxNode,
+    JsVariableDeclaration, TextRange,
 };
-use biome_json_syntax::{AnyJsonValue, JsonLanguage, JsonSyntaxNode};
-use biome_rowan::{AstNode, AstSeparatedList, SyntaxNode, SyntaxNodeCast};
-use bpaf::Bpaf;
+use biome_js_syntax::{
+    AnyJsExpression, AnyJsMemberExpression, JsIdentifierExpression, TsTypeofType,
+};
+use biome_rowan::{AstNode, SyntaxNodeCast};
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::str::FromStr;
 
 #[cfg(feature = "schemars")]
 use schemars::JsonSchema;
@@ -36,14 +37,11 @@ declare_rule! {
     /// - `useMemo`
     /// - `useImperativeHandle`
     /// - `useState`
-    /// - `useContext`
     /// - `useReducer`
     /// - `useRef`
     /// - `useDebugValue`
     /// - `useDeferredValue`
     /// - `useTransition`
-    /// - `useId`
-    /// - `useSyncExternalStore`
     ///
     /// If you want to add more hooks to the rule, check the [#options](options).
     ///
@@ -58,7 +56,7 @@ declare_rule! {
     ///     let a = 1;
     ///     useEffect(() => {
     ///         console.log(a);
-    ///     });
+    ///     }, []);
     /// }
     /// ```
     ///
@@ -92,11 +90,11 @@ declare_rule! {
     ///     const b = a + 1;
     ///     useEffect(() => {
     ///         console.log(b);
-    ///     });
+    ///     }, []);
     /// }
     /// ```
     ///
-    /// ## Valid
+    /// ### Valid
     ///
     /// ```js
     /// import { useEffect } from "react";
@@ -121,7 +119,7 @@ declare_rule! {
     /// ```
     ///
     /// ```js
-    /// import { useEffect } from "react";
+    /// import { useEffect, useState } from "react";
     ///
     /// function component() {
     ///     const [name, setName] = useState();
@@ -129,6 +127,16 @@ declare_rule! {
     ///         console.log(name);
     ///         setName("");
     ///     }, [name]);
+    /// }
+    /// ```
+    ///
+    /// ```js
+    /// import { useEffect } from "react";
+    /// let outer = false;
+    /// function component() {
+    ///     useEffect(() => {
+    ///         outer = true;
+    ///     }, []);
     /// }
     /// ```
     ///
@@ -148,7 +156,7 @@ declare_rule! {
     /// }
     /// ```
     ///
-    /// Given the previous example, your hooks be used like this:
+    /// Given the previous example, your hooks can be used like this:
     ///
     /// ```js
     /// function Foo() {
@@ -160,6 +168,7 @@ declare_rule! {
     pub(crate) UseExhaustiveDependencies {
         version: "1.0.0",
         name: "useExhaustiveDependencies",
+        source: RuleSource::EslintReactHooks("exhaustive-deps"),
         recommended: true,
     }
 }
@@ -180,7 +189,6 @@ impl Default for ReactExtensiveDependenciesOptions {
             ("useMemo".to_string(), (0, 1).into()),
             ("useImperativeHandle".to_string(), (1, 2).into()),
             ("useState".to_string(), ReactHookConfiguration::default()),
-            ("useContext".to_string(), ReactHookConfiguration::default()),
             ("useReducer".to_string(), ReactHookConfiguration::default()),
             ("useRef".to_string(), ReactHookConfiguration::default()),
             (
@@ -195,11 +203,6 @@ impl Default for ReactExtensiveDependenciesOptions {
                 "useTransition".to_string(),
                 ReactHookConfiguration::default(),
             ),
-            ("useId".to_string(), ReactHookConfiguration::default()),
-            (
-                "useSyncExternalStore".to_string(),
-                ReactHookConfiguration::default(),
-            ),
         ]);
 
         let stable_config = FxHashSet::from_iter([
@@ -207,9 +210,6 @@ impl Default for ReactExtensiveDependenciesOptions {
             StableReactHookConfiguration::new("useReducer", Some(1)),
             StableReactHookConfiguration::new("useTransition", Some(1)),
             StableReactHookConfiguration::new("useRef", None),
-            StableReactHookConfiguration::new("useContext", None),
-            StableReactHookConfiguration::new("useId", None),
-            StableReactHookConfiguration::new("useSyncExternalStore", None),
         ]);
 
         Self {
@@ -219,184 +219,29 @@ impl Default for ReactExtensiveDependenciesOptions {
     }
 }
 
-/// Options for the rule `useExhaustiveDependencies` and `useHookAtTopLevel`
-#[derive(Default, Deserialize, Serialize, Eq, PartialEq, Debug, Clone, Bpaf)]
+/// Options for the rule `useExhaustiveDependencies`
+#[derive(Clone, Debug, Default, Deserialize, Deserializable, Eq, PartialEq, Serialize)]
 #[cfg_attr(feature = "schemars", derive(JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct HooksOptions {
-    #[bpaf(external, hide, many)]
     /// List of safe hooks
+    #[deserializable(validate = "non_empty")]
     pub hooks: Vec<Hooks>,
 }
 
-impl FromStr for HooksOptions {
-    type Err = ();
-
-    fn from_str(_s: &str) -> Result<Self, Self::Err> {
-        Ok(HooksOptions::default())
-    }
-}
-
-#[derive(Default, Deserialize, Serialize, Eq, PartialEq, Debug, Clone, Bpaf)]
+#[derive(Clone, Debug, Default, Deserialize, Deserializable, Eq, PartialEq, Serialize)]
 #[cfg_attr(feature = "schemars", derive(JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Hooks {
-    #[bpaf(hide)]
     /// The name of the hook
+    #[deserializable(validate = "non_empty")]
     pub name: String,
-    #[bpaf(hide)]
     /// The "position" of the closure function, starting from zero.
     ///
     /// ### Example
     pub closure_index: Option<usize>,
-    #[bpaf(hide)]
     /// The "position" of the array of dependencies, starting from zero.
     pub dependencies_index: Option<usize>,
-}
-
-impl Hooks {
-    const KNOWN_KEYS: &'static [&'static str] = &["name", "closureIndex", "dependenciesIndex"];
-}
-
-impl VisitNode<JsonLanguage> for Hooks {
-    fn visit_member_name(
-        &mut self,
-        node: &JsonSyntaxNode,
-        diagnostics: &mut Vec<DeserializationDiagnostic>,
-    ) -> Option<()> {
-        has_only_known_keys(node, Hooks::KNOWN_KEYS, diagnostics)
-    }
-
-    fn visit_map(
-        &mut self,
-        key: &JsonSyntaxNode,
-        value: &JsonSyntaxNode,
-        diagnostics: &mut Vec<DeserializationDiagnostic>,
-    ) -> Option<()> {
-        let (name, value) = self.get_key_and_value(key, value, diagnostics)?;
-        let name_text = name.text();
-        match name_text {
-            "name" => {
-                self.name = self.map_to_string(&value, name_text, diagnostics)?;
-            }
-            "closureIndex" => {
-                self.closure_index = self.map_to_usize(&value, name_text, usize::MAX, diagnostics);
-            }
-            "dependenciesIndex" => {
-                self.dependencies_index =
-                    self.map_to_usize(&value, name_text, usize::MAX, diagnostics);
-            }
-            _ => {}
-        }
-
-        Some(())
-    }
-}
-
-impl FromStr for Hooks {
-    type Err = ();
-
-    fn from_str(_s: &str) -> Result<Self, Self::Err> {
-        Ok(Hooks::default())
-    }
-}
-
-impl VisitNode<JsonLanguage> for HooksOptions {
-    fn visit_member_name(
-        &mut self,
-        node: &JsonSyntaxNode,
-        diagnostics: &mut Vec<DeserializationDiagnostic>,
-    ) -> Option<()> {
-        has_only_known_keys(node, &["hooks"], diagnostics)
-    }
-
-    fn visit_array_member(
-        &mut self,
-        element: &SyntaxNode<JsonLanguage>,
-        diagnostics: &mut Vec<DeserializationDiagnostic>,
-    ) -> Option<()> {
-        let mut hook = Hooks::default();
-        let element = AnyJsonValue::cast_ref(element)?;
-        self.map_to_object(&element, "hooks", &mut hook, diagnostics)?;
-        if hook.name.is_empty() {
-            diagnostics.push(
-                DeserializationDiagnostic::new(markup!(
-                    "The field "<Emphasis>"name"</Emphasis>" is mandatory"
-                ))
-                .with_range(element.range()),
-            )
-        } else {
-            self.hooks.push(hook);
-        }
-        Some(())
-    }
-
-    fn visit_map(
-        &mut self,
-        key: &JsonSyntaxNode,
-        value: &JsonSyntaxNode,
-        diagnostics: &mut Vec<DeserializationDiagnostic>,
-    ) -> Option<()> {
-        let (name, value) = self.get_key_and_value(key, value, diagnostics)?;
-        let name_text = name.text();
-        if name_text == "hooks" {
-            let array = value.as_json_array_value()?;
-
-            for element in array.elements() {
-                let element = element.ok()?;
-                let hook_array = element.as_json_array_value()?;
-
-                let len = hook_array.elements().len();
-                if len < 1 {
-                    diagnostics.push(
-                        DeserializationDiagnostic::new("At least one element is needed")
-                            .with_range(hook_array.range()),
-                    );
-                    return Some(());
-                }
-                if len > 3 {
-                    diagnostics.push(
-                        DeserializationDiagnostic::new(
-                            "Too many elements, maximum three are expected",
-                        )
-                        .with_range(hook_array.range()),
-                    );
-                    return Some(());
-                }
-                let mut elements = hook_array.elements().iter();
-                let hook_name = elements.next()?.ok()?;
-                let hook_name = hook_name
-                    .as_json_string_value()
-                    .ok_or_else(|| {
-                        DeserializationDiagnostic::new_incorrect_type("string", hook_name.range())
-                    })
-                    .ok()?
-                    .inner_string_text()
-                    .ok()?
-                    .to_string();
-
-                let closure_index = if let Some(element) = elements.next() {
-                    let element = element.ok()?;
-                    Some(self.map_to_u8(&element, name_text, u8::MAX, diagnostics)? as usize)
-                } else {
-                    None
-                };
-                let dependencies_index = if let Some(element) = elements.next() {
-                    let element = element.ok()?;
-                    Some(self.map_to_u8(&element, name_text, u8::MAX, diagnostics)? as usize)
-                } else {
-                    None
-                };
-
-                self.hooks.push(Hooks {
-                    name: hook_name,
-                    closure_index,
-                    dependencies_index,
-                });
-            }
-        }
-        Some(())
-    }
 }
 
 impl ReactExtensiveDependenciesOptions {
@@ -419,24 +264,31 @@ impl ReactExtensiveDependenciesOptions {
 /// Flags the possible fixes that were found
 pub enum Fix {
     /// When a dependency needs to be added.
-    AddDependency(TextRange, Vec<TextRange>),
+    AddDependency {
+        function_name_range: TextRange,
+        captures: (String, Vec<TextRange>),
+        dependencies_len: usize,
+    },
     /// When a dependency needs to be removed.
-    RemoveDependency(TextRange, Vec<TextRange>),
+    RemoveDependency {
+        function_name_range: TextRange,
+        component_function: JsSyntaxNode,
+        dependencies: Vec<AnyJsExpression>,
+    },
     /// When a dependency is more deep than the capture
     DependencyTooDeep {
         function_name_range: TextRange,
         capture_range: TextRange,
         dependency_range: TextRange,
+        dependency_text: String,
     },
 }
 
-fn get_whole_static_member_expression(
-    reference: &JsSyntaxNode,
-) -> Option<JsStaticMemberExpression> {
+fn get_whole_static_member_expression(reference: &JsSyntaxNode) -> Option<AnyJsMemberExpression> {
     let root = reference
         .ancestors()
         .skip(2) //IDENT and JS_REFERENCE_IDENTIFIER
-        .take_while(|x| x.kind() == JsSyntaxKind::JS_STATIC_MEMBER_EXPRESSION)
+        .take_while(|x| AnyJsMemberExpression::can_cast(x.kind()))
         .last()?;
     root.cast()
 }
@@ -449,6 +301,15 @@ fn capture_needs_to_be_in_the_dependency_list(
     model: &SemanticModel,
     options: &ReactExtensiveDependenciesOptions,
 ) -> Option<Capture> {
+    // Ignore if referenced in TS typeof
+    if capture
+        .node()
+        .ancestors()
+        .any(|a| TsTypeofType::can_cast(a.kind()))
+    {
+        return None;
+    }
+
     let binding = capture.binding();
 
     // Ignore if imported
@@ -467,7 +328,6 @@ fn capture_needs_to_be_in_the_dependency_list(
         | AnyJsBindingDeclaration::TsInferType(_)
         | AnyJsBindingDeclaration::TsMappedType(_)
         | AnyJsBindingDeclaration::TsTypeParameter(_) => None,
-
         // Variable declarators are stable if ...
         AnyJsBindingDeclaration::JsVariableDeclarator(declarator) => {
             let declaration = declarator
@@ -476,10 +336,10 @@ fn capture_needs_to_be_in_the_dependency_list(
                 .find_map(JsVariableDeclaration::cast)?;
             let declaration_range = declaration.syntax().text_range();
 
-            if declaration.is_const() {
-                // ... they are `const` and declared outside of the component function
-                let _ = component_function_range.intersect(declaration_range)?;
+            // ... they are declared outside of the component function
+            let _ = component_function_range.intersect(declaration_range)?;
 
+            if declaration.is_const() {
                 // ... they are `const` and their initializer is constant
                 let initializer = declarator.initializer()?;
                 let expr = initializer.expression().ok()?;
@@ -489,7 +349,8 @@ fn capture_needs_to_be_in_the_dependency_list(
             }
 
             // ... they are assign to stable returns of another React function
-            let not_stable = !is_binding_react_stable(&binding.tree(), &options.stable_config);
+            let not_stable =
+                !is_binding_react_stable(&binding.tree(), model, &options.stable_config);
             not_stable.then_some(capture)
         }
 
@@ -508,15 +369,15 @@ fn capture_needs_to_be_in_the_dependency_list(
         | AnyJsBindingDeclaration::TsDeclareFunctionExportDefaultDeclaration(_)
         | AnyJsBindingDeclaration::JsCatchDeclaration(_) => Some(capture),
 
+        // Ignore TypeScript `import <id> =`
+        AnyJsBindingDeclaration::TsImportEqualsDeclaration(_) => None,
+
         // This should be unreachable because of the test if the capture is imported
-        AnyJsBindingDeclaration::JsImportDefaultClause(_)
-        | AnyJsBindingDeclaration::JsImportNamespaceClause(_)
-        | AnyJsBindingDeclaration::JsShorthandNamedImportSpecifier(_)
+        AnyJsBindingDeclaration::JsShorthandNamedImportSpecifier(_)
         | AnyJsBindingDeclaration::JsNamedImportSpecifier(_)
         | AnyJsBindingDeclaration::JsBogusNamedImportSpecifier(_)
         | AnyJsBindingDeclaration::JsDefaultImportSpecifier(_)
-        | AnyJsBindingDeclaration::JsNamespaceImportSpecifier(_)
-        | AnyJsBindingDeclaration::TsImportEqualsDeclaration(_) => {
+        | AnyJsBindingDeclaration::JsNamespaceImportSpecifier(_) => {
             unreachable!()
         }
     }
@@ -533,6 +394,71 @@ fn function_of_hook_call(call: &JsCallExpression) -> Option<JsSyntaxNode> {
                 | JsSyntaxKind::JS_ARROW_FUNCTION_EXPRESSION
         )
     })
+}
+
+/// Check if `identifier` is declared outside of `function` scope
+fn is_out_of_function_scope(
+    identifier: &AnyJsExpression,
+    function: &JsSyntaxNode,
+    model: &SemanticModel,
+) -> Option<bool> {
+    let identifier_name = JsIdentifierExpression::cast_ref(identifier.syntax())?
+        .name()
+        .ok()?;
+
+    let declaration = model.binding(&identifier_name)?.tree().declaration()?;
+
+    Some(
+        model
+            .scope(declaration.syntax())
+            .is_ancestor_of(&model.scope(function)),
+    )
+}
+
+fn into_member_vec(node: &JsSyntaxNode) -> Vec<String> {
+    let mut vec = vec![];
+    let mut next = Some(node.clone());
+
+    while let Some(node) = &next {
+        match AnyJsMemberExpression::cast_ref(node) {
+            Some(member_expr) => {
+                let member_name = member_expr
+                    .member_name()
+                    .and_then(|it| it.as_string_constant().map(|it| it.to_owned()));
+                if let Some(member_name) = member_name {
+                    vec.insert(0, member_name);
+                }
+                next = member_expr.object().ok().map(AstNode::into_syntax);
+            }
+            None => {
+                vec.insert(0, node.text_trimmed().to_string());
+                break;
+            }
+        }
+    }
+
+    vec
+}
+
+fn compare_member_depth(a: &JsSyntaxNode, b: &JsSyntaxNode) -> (bool, bool) {
+    let mut a_member_iter = into_member_vec(a).into_iter();
+    let mut b_member_iter = into_member_vec(b).into_iter();
+
+    loop {
+        let a_member = a_member_iter.next();
+        let b_member = b_member_iter.next();
+
+        match (a_member, b_member) {
+            (Some(a_member), Some(b_member)) => {
+                if a_member != b_member {
+                    return (false, false);
+                }
+            }
+            (Some(_), None) => return (true, false),
+            (None, Some(_)) => return (false, true),
+            (None, None) => return (true, true),
+        }
+    }
 }
 
 impl Rule for UseExhaustiveDependencies {
@@ -554,6 +480,11 @@ impl Rule for UseExhaustiveDependencies {
             let Some(component_function) = function_of_hook_call(call) else {
                 return vec![];
             };
+
+            if result.dependencies_node.is_none() {
+                return vec![];
+            }
+
             let component_function_range = component_function.text_range();
 
             let captures: Vec<_> = result
@@ -569,46 +500,35 @@ impl Rule for UseExhaustiveDependencies {
                 .map(|capture| {
                     let path = get_whole_static_member_expression(capture.node());
 
-                    let (text, range) = if let Some(path) = path {
-                        (
+                    match path {
+                        Some(path) => (
                             path.syntax().text_trimmed().to_string(),
                             path.syntax().text_trimmed_range(),
-                        )
-                    } else {
-                        (
+                            path.syntax().clone(),
+                        ),
+                        None => (
                             capture.node().text_trimmed().to_string(),
                             capture.node().text_trimmed_range(),
-                        )
-                    };
-
-                    (text, range, capture)
+                            capture.node().clone(),
+                        ),
+                    }
                 })
                 .collect();
 
-            let deps: Vec<(String, TextRange)> = result
-                .all_dependencies()
-                .map(|dep| {
-                    (
-                        dep.syntax().text_trimmed().to_string(),
-                        dep.syntax().text_trimmed_range(),
-                    )
-                })
-                .collect();
+            let deps: Vec<_> = result.all_dependencies().collect();
+            let dependencies_len = deps.len();
 
             let mut add_deps: BTreeMap<String, Vec<TextRange>> = BTreeMap::new();
-            let mut remove_deps: Vec<TextRange> = vec![];
 
             // Evaluate all the captures
-            for (capture_text, capture_range, _) in captures.iter() {
+            for (capture_text, capture_range, capture_path) in captures.iter() {
                 let mut suggested_fix = None;
                 let mut is_captured_covered = false;
-                for (dependency_text, dependency_range) in deps.iter() {
-                    let capture_deeper_than_dependency = capture_text.starts_with(dependency_text);
-                    let dependency_deeper_than_capture = dependency_text.starts_with(capture_text);
-                    match (
-                        capture_deeper_than_dependency,
-                        dependency_deeper_than_capture,
-                    ) {
+                for dep in deps.iter() {
+                    let (capture_contains_dep, dep_contains_capture) =
+                        compare_member_depth(capture_path, dep.syntax());
+
+                    match (capture_contains_dep, dep_contains_capture) {
                         // capture == dependency
                         (true, true) => {
                             suggested_fix = None;
@@ -635,7 +555,8 @@ impl Rule for UseExhaustiveDependencies {
                             suggested_fix = Some(Fix::DependencyTooDeep {
                                 function_name_range: result.function_name_range,
                                 capture_range: *capture_range,
-                                dependency_range: *dependency_range,
+                                dependency_range: dep.syntax().text_trimmed_range(),
+                                dependency_text: dep.syntax().text_trimmed().to_string(),
                             });
                         }
                         _ => {}
@@ -652,70 +573,104 @@ impl Rule for UseExhaustiveDependencies {
                 }
             }
 
+            let mut remove_deps: Vec<AnyJsExpression> = vec![];
             // Search for dependencies not captured
-            for (dependency_text, dep_range) in deps {
-                let mut covers_any_capture = false;
-                for (capture_text, _, _) in captures.iter() {
-                    let capture_deeper_dependency = capture_text.starts_with(&dependency_text);
-                    let dependency_deeper_capture = dependency_text.starts_with(capture_text);
-                    if capture_deeper_dependency || dependency_deeper_capture {
-                        covers_any_capture = true;
-                        break;
-                    }
-                }
+            for dep in deps {
+                let covers_any_capture = captures.iter().any(|(_, _, capture_path)| {
+                    let (capture_contains_dep, dep_contains_capture) =
+                        compare_member_depth(capture_path, dep.syntax());
+                    capture_contains_dep || dep_contains_capture
+                });
 
                 if !covers_any_capture {
-                    remove_deps.push(dep_range);
+                    remove_deps.push(dep);
                 }
             }
 
             // Generate signals
-            for (_, captures) in add_deps {
-                signals.push(Fix::AddDependency(result.function_name_range, captures));
+            for captures in add_deps {
+                signals.push(Fix::AddDependency {
+                    function_name_range: result.function_name_range,
+                    captures,
+                    dependencies_len,
+                });
             }
 
             if !remove_deps.is_empty() {
-                signals.push(Fix::RemoveDependency(
-                    result.function_name_range,
-                    remove_deps,
-                ));
+                signals.push(Fix::RemoveDependency {
+                    function_name_range: result.function_name_range,
+                    component_function,
+                    dependencies: remove_deps,
+                });
             }
         }
 
         signals
     }
 
-    fn diagnostic(_: &RuleContext<Self>, dep: &Self::State) -> Option<RuleDiagnostic> {
+    fn diagnostic(ctx: &RuleContext<Self>, dep: &Self::State) -> Option<RuleDiagnostic> {
         match dep {
-            Fix::AddDependency(use_effect_range, captures) => {
+            Fix::AddDependency {
+                function_name_range,
+                captures,
+                dependencies_len,
+            } => {
+                let (capture_text, captures_range) = captures;
                 let mut diag = RuleDiagnostic::new(
                     rule_category!(),
-                    use_effect_range,
-                    markup! {
-                        "This hook do not specify all of its dependencies."
-                    },
+                    function_name_range,
+                    markup! {"This hook does not specify all of its dependencies: "{capture_text}""},
                 );
 
-                for range in captures.iter() {
+                for range in captures_range {
                     diag = diag.detail(
                         range,
                         "This dependency is not specified in the hook dependency list.",
                     );
                 }
 
+                if *dependencies_len == 0 {
+                    diag = if captures_range.len() == 1 {
+                        diag.note("Either include it or remove the dependency array")
+                    } else {
+                        diag.note("Either include them or remove the dependency array")
+                    }
+                }
+
                 Some(diag)
             }
-            Fix::RemoveDependency(use_effect_range, ranges) => {
+            Fix::RemoveDependency {
+                function_name_range,
+                dependencies,
+                component_function,
+            } => {
+                let deps_joined_with_comma = dependencies
+                    .iter()
+                    .map(|dep| dep.syntax().text_trimmed().to_string())
+                    .collect::<Vec<String>>()
+                    .join(", ");
                 let mut diag = RuleDiagnostic::new(
                     rule_category!(),
-                    use_effect_range,
+                    function_name_range,
                     markup! {
-                        "This hook specifies more dependencies than necessary."
+                        "This hook specifies more dependencies than necessary: "{deps_joined_with_comma}""
                     },
                 );
 
-                for range in ranges.iter() {
-                    diag = diag.detail(range, "This dependency can be removed from the list.");
+                let model = ctx.model();
+                for dep in dependencies {
+                    if is_out_of_function_scope(dep, component_function, model).unwrap_or(false) {
+                        diag = diag.detail(
+                            dep.syntax().text_trimmed_range(),
+                            "Outer scope values aren't valid dependencies because mutating them doesn't re-render the component.",
+
+                        );
+                    } else {
+                        diag = diag.detail(
+                            dep.syntax().text_trimmed_range(),
+                            "This dependency can be removed from the list.",
+                        );
+                    }
                 }
 
                 Some(diag)
@@ -724,12 +679,13 @@ impl Rule for UseExhaustiveDependencies {
                 function_name_range,
                 capture_range,
                 dependency_range,
+                dependency_text,
             } => {
                 let diag = RuleDiagnostic::new(
                     rule_category!(),
                     function_name_range,
                     markup! {
-                        "This hook specifies a dependency more specific that its captures"
+                        "This hook specifies a dependency more specific that its captures: "{dependency_text}""
                     },
                 )
                 .detail(capture_range, "This capture is more generic than...")

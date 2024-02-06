@@ -1,18 +1,15 @@
 use crate::generate_schema::generate_configuration_schema;
 use biome_cli::biome_command;
 use biome_js_formatter::context::JsFormatOptions;
-use biome_js_formatter::format_node;
 use biome_js_parser::{parse_module, JsParserOptions};
 use biome_js_syntax::JsFileSource;
-use biome_service::VERSION;
+use biome_json_formatter::context::JsonFormatOptions;
+use biome_json_formatter::format_node;
+use biome_json_parser::{parse_json, JsonParserOptions};
+use biome_rowan::AstNode;
+use biome_service::{PartialConfiguration, VERSION};
 use std::fs;
 use xtask::{project_root, Mode, Result};
-
-const VSCODE_FRONTMATTER: &str = r#"---
-title: VSCode extension
-description: Notes about the Biome's VSCode extension
----
-"#;
 
 const CHANGELOG_FRONTMATTER: &str = r#"---
 title: Changelog
@@ -26,17 +23,33 @@ tableOfContents:
 pub(crate) fn generate_files() -> Result<()> {
     generate_configuration_schema(Mode::Overwrite)?;
     let schema_path_npm = project_root().join("packages/@biomejs/biome/configuration_schema.json");
-    let readme = fs::read_to_string(project_root().join("editors/vscode/README.md"))?;
     let changelog = fs::read_to_string(project_root().join("CHANGELOG.md"))?;
-    fs::remove_file(project_root().join("website/src/content/docs/reference/vscode.mdx")).ok();
+    let default_configuration =
+        project_root().join("website/src/components/generated/DefaultConfiguration.mdx");
     fs::remove_file(project_root().join("website/src/content/docs/internals/changelog.mdx")).ok();
-    let vscode = format!("{VSCODE_FRONTMATTER}{readme}");
     let changelog = format!("{CHANGELOG_FRONTMATTER}{changelog}");
 
-    fs::write(
-        project_root().join("website/src/content/docs/reference/vscode.mdx"),
-        vscode,
-    )?;
+    let configuration_content = serde_json::to_string(&PartialConfiguration::init()).unwrap();
+    let tree = parse_json(&configuration_content, JsonParserOptions::default());
+    let formatted = format_node(
+        JsonFormatOptions::default().with_line_width(60.try_into().unwrap()),
+        tree.tree().syntax(),
+    )
+    .unwrap()
+    .print()
+    .unwrap();
+
+    let configuration = format!(
+        r#"
+```json title="biome.json"
+{}
+```
+"#,
+        formatted.as_code()
+    );
+
+    fs::write(default_configuration, configuration)?;
+
     fs::write(
         project_root().join("website/src/content/docs/internals/changelog.mdx"),
         changelog,
@@ -92,7 +105,7 @@ export function GET() {"#,
     }"#,
         );
         let node = parse_module(&content, JsParserOptions::default());
-        let result = format_node(
+        let result = biome_js_formatter::format_node(
             JsFormatOptions::new(JsFileSource::js_module()),
             &node.syntax(),
         )

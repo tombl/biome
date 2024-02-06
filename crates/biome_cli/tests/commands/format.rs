@@ -3,7 +3,7 @@ use crate::configs::{
     CONFIG_FORMATTER_AND_FILES_IGNORE, CONFIG_FORMATTER_IGNORED_DIRECTORIES,
     CONFIG_FORMATTER_IGNORED_FILES, CONFIG_ISSUE_3175_1, CONFIG_ISSUE_3175_2,
 };
-use crate::snap_test::{markup_to_string, SnapshotPayload};
+use crate::snap_test::{assert_file_contents, markup_to_string, SnapshotPayload};
 use crate::{
     assert_cli_snapshot, run_cli, CUSTOM_FORMAT_BEFORE, FORMATTED, LINT_ERROR, UNFORMATTED,
 };
@@ -37,6 +37,27 @@ let b = {
 const APPLY_QUOTE_STYLE_AFTER: &str = "let a = 'something';
 let b = {\n\t'hey': 'hello',\n};\n";
 
+const APPLY_CSS_QUOTE_STYLE_BEFORE: &str =
+    r#"[class='foo'] { background-image: url("/path/to/file.jpg")}"#;
+
+const APPLY_CSS_QUOTE_STYLE_AFTER: &str =
+    "[class='foo'] {\n\tbackground-image: url('/path/to/file.jpg');\n}\n";
+
+const ASTRO_FILE_UNFORMATTED: &str = r#"---
+import {    something } from "file.astro";
+
+statement ( ) ;
+
+---
+<div></div>"#;
+
+const ASTRO_FILE_FORMATTED: &str = r#"---
+import { something } from "file.astro";
+
+statement();
+---
+<div></div>"#;
+
 const APPLY_TRAILING_COMMA_BEFORE: &str = r#"
 const a = [
 	longlonglonglongItem1longlonglonglongItem1,
@@ -67,6 +88,64 @@ action => {};
 ([action]) => {};
 (...action) => {};
 (action = 1) => {};
+"#;
+
+const APPLY_BRACKET_SPACING_BEFORE: &str = r#"import { Foo } from "bar";
+let foo = { a, b };
+const { a, b } = foo;
+"#;
+
+const APPLY_BRACKET_SPACING_AFTER: &str = r#"import {Foo} from "bar";
+let foo = {a, b};
+const {a, b} = foo;
+"#;
+
+const APPLY_BRACKET_SAME_LINE_BEFORE: &str = r#"<Foo
+	className={style}
+	reallyLongAttributeName1={longComplexValue}
+	reallyLongAttributeName2={anotherLongValue}
+/>;
+
+<Foo
+	className={style}
+	reallyLongAttributeName1={longComplexValue}
+	reallyLongAttributeName2={anotherLongValue}
+>
+	Hi
+</Foo>;
+"#;
+
+const APPLY_BRACKET_SAME_LINE_AFTER: &str = r#"<Foo
+	className={style}
+	reallyLongAttributeName1={longComplexValue}
+	reallyLongAttributeName2={anotherLongValue}
+/>;
+
+<Foo
+	className={style}
+	reallyLongAttributeName1={longComplexValue}
+	reallyLongAttributeName2={anotherLongValue}>
+	Hi
+</Foo>;
+"#;
+
+const APPLY_ATTRIBUTE_POSITION_BEFORE: &str = r#"<Foo className={style}	reallyLongAttributeName1={longComplexValue}
+reallyLongAttributeName2={anotherLongValue} />;
+
+<Foo reallyLongAttributeName1={longComplexValue}reallyLongAttributeName2={anotherLongValue}>Hi</Foo>;"#;
+
+const APPLY_ATTRIBUTE_POSITION_AFTER: &str = r#"<Foo
+	className={style}
+	reallyLongAttributeName1={longComplexValue}
+	reallyLongAttributeName2={anotherLongValue}
+/>;
+
+<Foo
+	reallyLongAttributeName1={longComplexValue}
+	reallyLongAttributeName2={anotherLongValue}
+>
+	Hi
+</Foo>;
 "#;
 
 // Without this, Test (windows-latest) fails with: `warning: constant `DEFAULT_CONFIGURATION_BEFORE` is never used`
@@ -130,19 +209,10 @@ fn print() {
         Args::from([("format"), file_path.as_os_str().to_str().unwrap()].as_slice()),
     );
 
-    assert!(result.is_ok(), "run_cli returned {result:?}");
+    assert!(result.is_err(), "run_cli returned {result:?}");
 
-    let mut file = fs
-        .open(file_path)
-        .expect("formatting target file was removed by the CLI");
+    assert_file_contents(&fs, file_path, UNFORMATTED);
 
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .expect("failed to read file from memory FS");
-
-    assert_eq!(content, UNFORMATTED);
-
-    drop(file);
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
         "formatter_print",
@@ -175,19 +245,10 @@ fn write() {
 
     assert!(result.is_ok(), "run_cli returned {result:?}");
 
-    let mut file = fs
-        .open(file_path)
-        .expect("formatting target file was removed by the CLI");
-
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .expect("failed to read file from memory FS");
-
-    assert_eq!(content, FORMATTED);
+    assert_file_contents(&fs, file_path, FORMATTED);
 
     assert_eq!(console.out_buffer.len(), 1);
 
-    drop(file);
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
         "formatter_write",
@@ -214,31 +275,15 @@ fn write_only_files_in_correct_base() {
     let result = run_cli(
         DynRef::Borrowed(&mut fs),
         &mut console,
-        Args::from([("format"), ("--write"), ("./src")].as_slice()),
+        Args::from(&["format", "--write", "./src"]),
     );
 
     assert!(result.is_ok(), "run_cli returned {result:?}");
 
-    let mut file = fs
-        .open(file_to_format)
-        .expect("formatting target file was removed by the CLI");
+    assert_file_contents(&fs, file_to_format, FORMATTED);
 
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .expect("failed to read file from memory FS");
+    assert_file_contents(&fs, file_to_not_format, UNFORMATTED);
 
-    assert_eq!(content, FORMATTED, "we test the file is formatted");
-    drop(file);
-    let mut file = fs
-        .open(file_to_not_format)
-        .expect("formatting target file was removed by the CLI");
-
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .expect("failed to read file from memory FS");
-
-    assert_eq!(content, UNFORMATTED, "we test the file is not formatted");
-    drop(file);
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
         "write_only_files_in_correct_base",
@@ -263,17 +308,9 @@ fn lint_warning() {
         Args::from([("format"), file_path.as_os_str().to_str().unwrap()].as_slice()),
     );
 
-    assert!(result.is_ok(), "run_cli returned {result:?}");
+    assert!(result.is_err(), "run_cli returned {result:?}");
 
-    let mut file = fs
-        .open(file_path)
-        .expect("formatting target file was removed by the CLI");
-
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .expect("failed to read file from memory FS");
-
-    assert_eq!(content, LINT_ERROR);
+    assert_file_contents(&fs, file_path, LINT_ERROR);
 
     // The console buffer is expected to contain the following message:
     // 0: "Formatter would have printed the following content"
@@ -285,7 +322,6 @@ fn lint_warning() {
         console.out_buffer
     );
 
-    drop(file);
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
         "formatter_lint_warning",
@@ -331,17 +367,8 @@ fn custom_config_file_path() {
 
     assert!(result.is_ok(), "run_cli returned {result:?}");
 
-    let mut file = fs
-        .open(file_path)
-        .expect("formatting target file was removed by the CLI");
+    assert_file_contents(&fs, file_path, DEFAULT_CONFIGURATION_AFTER);
 
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .expect("failed to read file from memory FS");
-
-    assert_eq!(content, DEFAULT_CONFIGURATION_AFTER);
-
-    drop(file);
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
         "custom_config_file_path",
@@ -418,17 +445,8 @@ fn applies_custom_configuration() {
 
     assert!(result.is_ok(), "run_cli returned {result:?}");
 
-    let mut file = fs
-        .open(file_path)
-        .expect("formatting target file was removed by the CLI");
+    assert_file_contents(&fs, file_path, CUSTOM_CONFIGURATION_AFTER);
 
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .expect("failed to read file from memory FS");
-
-    assert_eq!(content, CUSTOM_CONFIGURATION_AFTER);
-
-    drop(file);
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
         "applies_custom_configuration",
@@ -470,17 +488,8 @@ fn applies_custom_configuration_over_config_file() {
 
     assert!(result.is_ok(), "run_cli returned {result:?}");
 
-    let mut file = fs
-        .open(file_path)
-        .expect("formatting target file was removed by the CLI");
+    assert_file_contents(&fs, file_path, CUSTOM_CONFIGURATION_AFTER);
 
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .expect("failed to read file from memory FS");
-
-    assert_eq!(content, CUSTOM_CONFIGURATION_AFTER);
-
-    drop(file);
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
         "applies_custom_configuration_over_config_file",
@@ -517,17 +526,8 @@ fn applies_custom_configuration_over_config_file_issue_3175_v1() {
 
     assert!(result.is_ok(), "run_cli returned {result:?}");
 
-    let mut file = fs
-        .open(file_path)
-        .expect("formatting target file was removed by the CLI");
+    assert_file_contents(&fs, file_path, "import React from 'react';\n");
 
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .expect("failed to read file from memory FS");
-
-    assert_eq!(content, "import React from 'react';\n");
-
-    drop(file);
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
         "applies_custom_configuration_over_config_file_issue_3175_v1",
@@ -569,17 +569,8 @@ fn applies_custom_configuration_over_config_file_issue_3175_v2() {
 
     assert!(result.is_ok(), "run_cli returned {result:?}");
 
-    let mut file = fs
-        .open(file_path)
-        .expect("formatting target file was removed by the CLI");
+    assert_file_contents(&fs, file_path, source);
 
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .expect("failed to read file from memory FS");
-
-    assert_eq!(content, source);
-
-    drop(file);
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
         "applies_custom_configuration_over_config_file_issue_3175_v2",
@@ -616,17 +607,8 @@ fn applies_custom_jsx_quote_style() {
 
     assert!(result.is_ok(), "run_cli returned {result:?}");
 
-    let mut file = fs
-        .open(file_path)
-        .expect("formatting target file was removed by the CLI");
+    assert_file_contents(&fs, file_path, APPLY_JSX_QUOTE_STYLE_AFTER);
 
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .expect("failed to read file from memory FS");
-
-    assert_eq!(content, APPLY_JSX_QUOTE_STYLE_AFTER);
-
-    drop(file);
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
         "applies_custom_jsx_quote_style",
@@ -663,20 +645,51 @@ fn applies_custom_quote_style() {
 
     assert!(result.is_ok(), "run_cli returned {result:?}");
 
-    let mut file = fs
-        .open(file_path)
-        .expect("formatting target file was removed by the CLI");
+    assert_file_contents(&fs, file_path, APPLY_QUOTE_STYLE_AFTER);
 
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .expect("failed to read file from memory FS");
-
-    assert_eq!(content, APPLY_QUOTE_STYLE_AFTER);
-
-    drop(file);
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
         "applies_custom_quote_style",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+#[ignore = "Enable when we are ready to handle CSS files"]
+fn applies_custom_css_quote_style() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let css_file_path = Path::new("file.css");
+    fs.insert(
+        css_file_path.into(),
+        APPLY_CSS_QUOTE_STYLE_BEFORE.as_bytes(),
+    );
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("format"),
+                ("--css-formatter-quote-style"),
+                ("single"),
+                ("--write"),
+                css_file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_file_contents(&fs, css_file_path, APPLY_CSS_QUOTE_STYLE_AFTER);
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "applies_custom_css_quote_style",
         fs,
         console,
         result,
@@ -708,20 +721,47 @@ fn applies_custom_trailing_comma() {
 
     assert!(result.is_ok(), "run_cli returned {result:?}");
 
-    let mut file = fs
-        .open(file_path)
-        .expect("formatting target file was removed by the CLI");
+    assert_file_contents(&fs, file_path, APPLY_TRAILING_COMMA_AFTER);
 
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .expect("failed to read file from memory FS");
-
-    assert_eq!(content, APPLY_TRAILING_COMMA_AFTER);
-
-    drop(file);
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
         "applies_custom_trailing_comma",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn applies_custom_attribute_position() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let file_path = Path::new("file.js");
+    fs.insert(file_path.into(), APPLY_ATTRIBUTE_POSITION_BEFORE.as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("format"),
+                ("--attribute-position"),
+                ("multiline"),
+                ("--write"),
+                file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_file_contents(&fs, file_path, APPLY_ATTRIBUTE_POSITION_AFTER);
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "applies_custom_attribute_position",
         fs,
         console,
         result,
@@ -753,6 +793,42 @@ fn applies_custom_arrow_parentheses() {
 
     assert!(result.is_ok(), "run_cli returned {result:?}");
 
+    assert_file_contents(&fs, file_path, APPLY_ARROW_PARENTHESES_AFTER);
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "applies_custom_arrow_parentheses",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn applies_custom_bracket_spacing() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let file_path = Path::new("file.js");
+    fs.insert(file_path.into(), APPLY_BRACKET_SPACING_BEFORE.as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("format"),
+                ("--bracket-spacing"),
+                ("false"),
+                ("--write"),
+                file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
     let mut file = fs
         .open(file_path)
         .expect("formatting target file was removed by the CLI");
@@ -761,12 +837,57 @@ fn applies_custom_arrow_parentheses() {
     file.read_to_string(&mut content)
         .expect("failed to read file from memory FS");
 
-    assert_eq!(content, APPLY_ARROW_PARENTHESES_AFTER);
+    assert_eq!(content, APPLY_BRACKET_SPACING_AFTER);
 
     drop(file);
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
-        "applies_custom_arrow_parentheses",
+        "applies_custom_bracket_spacing",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn applies_custom_bracket_same_line() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let file_path = Path::new("file.js");
+    fs.insert(file_path.into(), APPLY_BRACKET_SAME_LINE_BEFORE.as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("format"),
+                ("--bracket-same-line"),
+                ("true"),
+                ("--write"),
+                file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    let mut file = fs
+        .open(file_path)
+        .expect("formatting target file was removed by the CLI");
+
+    let mut content = String::new();
+    file.read_to_string(&mut content)
+        .expect("failed to read file from memory FS");
+
+    assert_eq!(content, APPLY_BRACKET_SAME_LINE_AFTER);
+
+    drop(file);
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "applies_custom_bracket_same_line",
         fs,
         console,
         result,
@@ -819,17 +940,8 @@ fn with_semicolons_options() {
 
     assert!(result.is_ok(), "run_cli returned {result:?}");
 
-    let mut file = fs
-        .open(file_path)
-        .expect("formatting target file was removed by the CLI");
+    assert_file_contents(&fs, file_path, "statement()\n");
 
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .expect("failed to read file from memory FS");
-
-    assert_eq!(content, "statement()\n");
-
-    drop(file);
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
         "with_semicolons_options",
@@ -1018,17 +1130,8 @@ fn format_with_configuration() {
 
     assert!(result.is_ok(), "run_cli returned {result:?}");
 
-    let mut file = fs
-        .open(file_path)
-        .expect("formatting target file was removed by the CLI");
+    assert_file_contents(&fs, file_path, CUSTOM_FORMAT_AFTER);
 
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .expect("failed to read file from memory FS");
-
-    assert_eq!(content, CUSTOM_FORMAT_AFTER);
-
-    drop(file);
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
         "format_with_configuration",
@@ -1056,17 +1159,8 @@ fn format_is_disabled() {
 
     assert!(result.is_err(), "run_cli returned {result:?}");
 
-    let mut file = fs
-        .open(file_path)
-        .expect("formatting target file was removed by the CLI");
+    assert_file_contents(&fs, file_path, CUSTOM_FORMAT_BEFORE);
 
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .expect("failed to read file from memory FS");
-
-    assert_eq!(content, CUSTOM_FORMAT_BEFORE);
-
-    drop(file);
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
         "format_is_disabled",
@@ -1095,7 +1189,7 @@ fn format_stdin_successfully() {
 
     let message = console
         .out_buffer
-        .get(0)
+        .first()
         .expect("Console should have written a message");
 
     let content = markup_to_string(markup! {
@@ -1157,7 +1251,7 @@ fn does_not_format_if_disabled() {
 
     let message = console
         .out_buffer
-        .get(0)
+        .first()
         .expect("Console should have written a message");
 
     let content = markup_to_string(markup! {
@@ -1193,17 +1287,8 @@ fn does_not_format_ignored_files() {
 
     assert!(result.is_err(), "run_cli returned {result:?}");
 
-    let mut file = fs
-        .open(file_path)
-        .expect("formatting target file was removed by the CLI");
+    assert_file_contents(&fs, file_path, UNFORMATTED);
 
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .expect("failed to read file from memory FS");
-
-    assert_eq!(content, UNFORMATTED);
-
-    drop(file);
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
         "does_not_format_ignored_files",
@@ -1308,29 +1393,118 @@ fn does_not_format_ignored_directories() {
     assert!(result.is_ok(), "run_cli returned {result:?}");
 
     for (file_path, expect_formatted) in FILES {
-        let mut file = fs
-            .open(Path::new(file_path))
-            .expect("formatting target file was removed by the CLI");
-
-        let mut content = String::new();
-        file.read_to_string(&mut content)
-            .expect("failed to read file from memory FS");
-
         let expected = if expect_formatted {
             FORMATTED
         } else {
             UNFORMATTED
         };
-
-        assert_eq!(
-            content, expected,
-            "content of {file_path} doesn't match the expected content"
-        );
+        assert_file_contents(&fs, Path::new(file_path), expected);
     }
 
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
         "does_not_format_ignored_directories",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn does_not_format_ignored_file_in_included_directory() {
+    let config = r#"{
+        "formatter": {
+          "include": ["src"],
+          "ignore": ["src/file2.js"]
+        }
+    }"#;
+    let files = [("src/file1.js", true), ("src/file2.js", false)];
+
+    let mut console = BufferConsole::default();
+    let mut fs = MemoryFileSystem::default();
+    let file_path = Path::new("biome.json");
+    fs.insert(file_path.into(), config);
+    for (file_path, _) in files {
+        let file_path = Path::new(file_path);
+        fs.insert(file_path.into(), UNFORMATTED.as_bytes());
+    }
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from([("format"), ("."), ("--write")].as_slice()),
+    );
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    for (file_path, expect_formatted) in files {
+        let expected = if expect_formatted {
+            FORMATTED
+        } else {
+            UNFORMATTED
+        };
+        assert_file_contents(&fs, Path::new(file_path), expected);
+    }
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "does_not_format_ignored_file_in_included_directory",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn include_ignore_cascade() {
+    // Only `file1.js` will be formatted:
+    // - `file2.js` is ignored at top-level
+    // - `file3.js` is ignored at formatter-level
+    // - `file4.js` is not included at top-level
+    let config = r#"{
+        "files": {
+          "include": ["file1.js", "file2.js", "file3.js"],
+          "ignore": ["file2.js"]
+        },
+        "formatter": {
+          "include": ["file1.js", "file2.js"],
+          "ignore": ["file3.js"]
+        }
+    }"#;
+    let files = [
+        ("file1.js", true),
+        ("file2.js", false),
+        ("file3.js", false),
+        ("file4.js", false),
+    ];
+
+    let mut console = BufferConsole::default();
+    let mut fs = MemoryFileSystem::default();
+    let file_path = Path::new("biome.json");
+    fs.insert(file_path.into(), config);
+    for (file_path, _) in files {
+        let file_path = Path::new(file_path);
+        fs.insert(file_path.into(), UNFORMATTED.as_bytes());
+    }
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from([("format"), ("."), ("--write")].as_slice()),
+    );
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    for (file_path, expect_formatted) in files {
+        let expected = if expect_formatted {
+            FORMATTED
+        } else {
+            UNFORMATTED
+        };
+        assert_file_contents(&fs, Path::new(file_path), expected);
+    }
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "include_ignore_cascade",
         fs,
         console,
         result,
@@ -1514,7 +1688,7 @@ fn max_diagnostics_default() {
         Args::from([("format"), ("src")].as_slice()),
     );
 
-    assert!(result.is_ok(), "run_cli returned {result:?}");
+    assert!(result.is_err(), "run_cli returned {result:?}");
 
     let mut diagnostic_count = 0;
     let mut filtered_messages = Vec::new();
@@ -1567,7 +1741,7 @@ fn max_diagnostics() {
         Args::from([("format"), ("--max-diagnostics"), ("10"), ("src")].as_slice()),
     );
 
-    assert!(result.is_ok(), "run_cli returned {result:?}");
+    assert!(result.is_err(), "run_cli returned {result:?}");
 
     let mut diagnostic_count = 0;
     let mut filtered_messages = Vec::new();
@@ -1647,7 +1821,7 @@ fn print_verbose() {
         ),
     );
 
-    assert!(result.is_ok(), "run_cli returned {result:?}");
+    assert!(result.is_err(), "run_cli returned {result:?}");
 
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
@@ -1785,6 +1959,118 @@ file2.js
 }
 
 #[test]
+fn include_vcs_ignore_cascade() {
+    // Only `file1.js` will be formatted:
+    // - `file2.js` is ignored at top-level
+    // - `file3.js` is ignored at formatter-level
+    // - `file4.js` is ignored in `.gitignore`
+    let git_ignore = r#"file4.js"#;
+    let config = r#"{
+        "vcs": {
+            "enabled": true,
+            "clientKind": "git",
+            "useIgnoreFile": true
+        },
+        "files": {
+          "ignore": ["file2.js"]
+        },
+        "formatter": {
+          "include": ["file1.js", "file2.js", "file4.js"],
+          "ignore": ["file3.js"]
+        }
+    }"#;
+    let files = [
+        ("file1.js", true),
+        ("file2.js", false),
+        ("file3.js", false),
+        ("file4.js", false),
+    ];
+
+    let mut console = BufferConsole::default();
+    let mut fs = MemoryFileSystem::default();
+    let gitignore_file = Path::new(".gitignore");
+    fs.insert(gitignore_file.into(), git_ignore.as_bytes());
+    let file_path = Path::new("biome.json");
+    fs.insert(file_path.into(), config);
+    for (file_path, _) in files {
+        let file_path = Path::new(file_path);
+        fs.insert(file_path.into(), UNFORMATTED.as_bytes());
+    }
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from([("format"), ("."), ("--write")].as_slice()),
+    );
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    for (file_path, expect_formatted) in files {
+        let expected = if expect_formatted {
+            FORMATTED
+        } else {
+            UNFORMATTED
+        };
+        assert_file_contents(&fs, Path::new(file_path), expected);
+    }
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "include_vcs_ignore_cascade",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn vcs_absolute_path() {
+    let git_ignore = r#"file.js"#;
+    let config = r#"{
+        "vcs": {
+            "enabled": true,
+            "clientKind": "git",
+            "useIgnoreFile": true
+        }
+    }"#;
+    let files = [("/symbolic/link/to/path.js", true)];
+
+    let mut console = BufferConsole::default();
+    let mut fs = MemoryFileSystem::default();
+    let gitignore_file = Path::new(".gitignore");
+    fs.insert(gitignore_file.into(), git_ignore.as_bytes());
+    let file_path = Path::new("biome.json");
+    fs.insert(file_path.into(), config);
+    for (file_path, _) in files {
+        let file_path = Path::new(file_path);
+        fs.insert(file_path.into(), UNFORMATTED.as_bytes());
+    }
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from([("format"), ("."), ("--write")].as_slice()),
+    );
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    for (file_path, expect_formatted) in files {
+        let expected = if expect_formatted {
+            FORMATTED
+        } else {
+            UNFORMATTED
+        };
+        assert_file_contents(&fs, Path::new(file_path), expected);
+    }
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "vcs_absolute_path",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
 fn ignores_unknown_file() {
     let mut fs = MemoryFileSystem::default();
     let mut console = BufferConsole::default();
@@ -1856,7 +2142,7 @@ fn ignore_comments_error_when_allow_comments() {
     let code = r#"
 /*test*/ [1, 2, 3]
 	"#;
-    let file_path = Path::new("tsconfig.json");
+    let file_path = Path::new("somefile.json");
     fs.insert(file_path.into(), code.as_bytes());
     fs.insert(biome_config.into(), config_json);
 
@@ -1866,7 +2152,7 @@ fn ignore_comments_error_when_allow_comments() {
         Args::from([("format"), file_path.as_os_str().to_str().unwrap()].as_slice()),
     );
 
-    assert!(result.is_ok(), "run_cli returned {result:?}");
+    assert!(result.is_err(), "run_cli returned {result:?}");
 
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
@@ -1896,7 +2182,7 @@ fn format_jsonc_files() {
         Args::from([("format"), file_path.as_os_str().to_str().unwrap()].as_slice()),
     );
 
-    assert!(result.is_ok(), "run_cli returned {result:?}");
+    assert!(result.is_err(), "run_cli returned {result:?}");
 
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
@@ -1933,7 +2219,7 @@ fn format_json_when_allow_trailing_commas() {
         Args::from([("format"), file_path.as_os_str().to_str().unwrap()].as_slice()),
     );
 
-    assert!(result.is_ok(), "run_cli returned {result:?}");
+    assert!(result.is_err(), "run_cli returned {result:?}");
 
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
@@ -1954,8 +2240,6 @@ fn treat_known_json_files_as_jsonc_files() {
 
 /* some other comment*/1, 2, 3]
 	"#;
-    let ts = Path::new("files/typescript.json");
-    fs.insert(ts.into(), code.as_bytes());
     let eslint = Path::new("files/.eslintrc.json");
     fs.insert(eslint.into(), code.as_bytes());
     let jshint = Path::new("files/.jshintrc");
@@ -1969,7 +2253,6 @@ fn treat_known_json_files_as_jsonc_files() {
         Args::from(
             [
                 ("format"),
-                ts.as_os_str().to_str().unwrap(),
                 eslint.as_os_str().to_str().unwrap(),
                 jshint.as_os_str().to_str().unwrap(),
                 babel.as_os_str().to_str().unwrap(),
@@ -1978,7 +2261,7 @@ fn treat_known_json_files_as_jsonc_files() {
         ),
     );
 
-    assert!(result.is_ok(), "run_cli returned {result:?}");
+    assert!(result.is_err(), "run_cli returned {result:?}");
 
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
@@ -2012,6 +2295,12 @@ fn should_apply_different_formatting() {
                 "lineWidth": 80,
                 "indentSize": 2
             }
+        },
+        "css": {
+            "formatter": {
+                "lineWidth": 40,
+                "indentSize": 6
+            }
         }
     }"#,
     );
@@ -2023,6 +2312,9 @@ fn should_apply_different_formatting() {
 	"#;
     let json_file = Path::new("input.json");
     fs.insert(json_file.into(), code.as_bytes());
+    let code = r#"html {}"#;
+    let css_file = Path::new("input.css");
+    fs.insert(css_file.into(), code.as_bytes());
 
     let code = r#"
 const a = {
@@ -2041,6 +2333,7 @@ const a = {
                 "--write",
                 json_file.as_os_str().to_str().unwrap(),
                 js_file.as_os_str().to_str().unwrap(),
+                css_file.as_os_str().to_str().unwrap(),
             ]
             .as_slice(),
         ),
@@ -2080,6 +2373,10 @@ fn should_apply_different_formatting_with_cli() {
     let json_file = Path::new("input.json");
     fs.insert(json_file.into(), json_file_content.as_bytes());
 
+    let css_file_content = r#"html {}"#;
+    let css_file = Path::new("input.css");
+    fs.insert(css_file.into(), css_file_content.as_bytes());
+
     let js_file_content = r#"
 const a = {
     "array": ["lorem ipsum", "lorem ipsum", "lorem ipsum", "lorem ipsum", "lorem ipsum", "lorem ipsum", "lorem ipsum"]
@@ -2099,8 +2396,11 @@ const a = {
                 "--javascript-formatter-indent-size=8",
                 "--json-formatter-line-width=20",
                 "--json-formatter-indent-size=2",
+                "--css-formatter-line-width=40",
+                "--css-formatter-indent-size=6",
                 json_file.as_os_str().to_str().unwrap(),
                 js_file.as_os_str().to_str().unwrap(),
+                css_file.as_os_str().to_str().unwrap(),
             ]
             .as_slice(),
         ),
@@ -2175,17 +2475,7 @@ const a = {
 
     assert!(result.is_ok(), "run_cli returned {result:?}");
 
-    let mut file = fs
-        .open(json_file)
-        .expect("formatting target file was removed by the CLI");
-
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .expect("failed to read file from memory FS");
-
-    assert_eq!(content, json_file_content);
-
-    drop(file);
+    assert_file_contents(&fs, json_file, json_file_content);
 
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
@@ -2254,21 +2544,79 @@ const a = {
 
     assert!(result.is_ok(), "run_cli returned {result:?}");
 
-    let mut file = fs
-        .open(js_file)
-        .expect("formatting target file was removed by the CLI");
-
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .expect("failed to read file from memory FS");
-
-    assert_eq!(content, js_file_content);
-
-    drop(file);
+    assert_file_contents(&fs, js_file, js_file_content);
 
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
         "should_not_format_js_files_if_disabled",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn should_not_format_css_files_if_disabled() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let biome_json = Path::new("biome.json");
+    fs.insert(
+        biome_json.into(),
+        r#"{
+        "formatter": {
+            "indentStyle": "space"
+        },
+        "javascript": {
+            "formatter": {
+                "lineWidth": 80,
+                "indentSize": 4
+            }
+        },
+        "css": {
+            "formatter": {
+                "enabled": false
+            }
+        }
+    }"#,
+    );
+
+    let css_file_content = r#"html {
+
+    }
+    "#;
+    let css_file = Path::new("input.css");
+    fs.insert(css_file.into(), css_file_content.as_bytes());
+
+    let js_file_content = r#"
+const a = {
+    "array": ["lorem ipsum", "lorem ipsum", "lorem ipsum", "lorem ipsum", "lorem ipsum", "lorem ipsum", "lorem ipsum"]
+}
+	"#;
+    let js_file = Path::new("input.js");
+    fs.insert(js_file.into(), js_file_content.as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("format"),
+                "--write",
+                css_file.as_os_str().to_str().unwrap(),
+                js_file.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_file_contents(&fs, css_file, css_file_content);
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "should_not_format_css_files_if_disabled",
         fs,
         console,
         result,
@@ -2344,7 +2692,7 @@ const a = {
     file.read_to_string(&mut content)
         .expect("failed to read file from memory FS");
 
-    assert!(content.contains('\t'), "should not contain tabs");
+    assert!(content.contains('\t'), "should contain tabs");
 
     drop(file);
 
@@ -2356,13 +2704,288 @@ const a = {
     file.read_to_string(&mut content)
         .expect("failed to read file from memory FS");
 
-    assert!(content.contains('\t'), "should not contain tabs");
+    assert!(content.contains('\t'), "should contain tabs");
 
     drop(file);
 
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
         "should_apply_different_indent_style",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn override_don_t_affect_ignored_files() {
+    let config = r#"{
+        "overrides": [{
+            "ignore": ["file2.js"]
+        }]
+    }"#;
+    let files = [("file1.js", true), ("file2.js", true)];
+
+    let mut console = BufferConsole::default();
+    let mut fs = MemoryFileSystem::default();
+    let file_path = Path::new("biome.json");
+    fs.insert(file_path.into(), config);
+    for (file_path, _) in files {
+        let file_path = Path::new(file_path);
+        fs.insert(file_path.into(), UNFORMATTED.as_bytes());
+    }
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from([("format"), ("."), ("--write")].as_slice()),
+    );
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    for (file_path, expect_formatted) in files {
+        let expected = if expect_formatted {
+            FORMATTED
+        } else {
+            UNFORMATTED
+        };
+        assert_file_contents(&fs, Path::new(file_path), expected);
+    }
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "override_don_t_affect_ignored_files",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn format_with_configured_line_ending() {
+    let mut console = BufferConsole::default();
+    let mut fs = MemoryFileSystem::default();
+
+    let config = r#"{
+        "formatter": {
+            "lineEnding": "crlf",
+            "lineWidth": 20
+        }
+    }"#;
+    let code_json = r#"{ "name": "mike", "surname": "ross" }"#;
+    let code_js = r#"const b = { "name": "mike", "surname": "ross" }"#;
+    let json_file = Path::new("input.json");
+    fs.insert(json_file.into(), code_json.as_bytes());
+
+    let js_file = Path::new("input.js");
+    fs.insert(js_file.into(), code_js.as_bytes());
+
+    let file_path = Path::new("biome.json");
+    fs.insert(file_path.into(), config);
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(&["format", ".", "--write"]),
+    );
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_file_contents(
+        &fs,
+        json_file,
+        "{\r\n\t\"name\": \"mike\",\r\n\t\"surname\": \"ross\"\r\n}\r\n",
+    );
+    assert_file_contents(
+        &fs,
+        js_file,
+        "const b = {\r\n\tname: \"mike\",\r\n\tsurname: \"ross\",\r\n};\r\n",
+    );
+}
+
+#[test]
+fn don_t_format_ignored_known_jsonc_files() {
+    let config = r#"{
+        "files": {
+            "ignoreUnknown": true,
+            "ignore": [".eslintrc"]
+        }
+    }"#;
+    let files = [(".eslintrc", false)];
+
+    let mut console = BufferConsole::default();
+    let mut fs = MemoryFileSystem::default();
+    let file_path = Path::new("biome.json");
+    fs.insert(file_path.into(), config);
+    for (file_path, _) in files {
+        let file_path = Path::new(file_path);
+        fs.insert(file_path.into(), UNFORMATTED.as_bytes());
+    }
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from([("format"), ("."), ("--write")].as_slice()),
+    );
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    for (file_path, expect_formatted) in files {
+        let expected = if expect_formatted {
+            FORMATTED
+        } else {
+            UNFORMATTED
+        };
+        assert_file_contents(&fs, Path::new(file_path), expected);
+    }
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "don_t_format_ignored_known_jsonc_files",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn format_package_json() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let file_path = Path::new("package.json");
+    fs.insert(
+        file_path.into(),
+        r#"{
+
+    "name":       "@foo/package",
+    "dependencies": { "foo": "latest" }
+
+     }"#
+        .as_bytes(),
+    );
+
+    let expected = r#"{
+  "name": "@foo/package",
+  "dependencies": { "foo": "latest" }
+}
+"#;
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("format"),
+                ("--write"),
+                "--indent-style=space",
+                file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_file_contents(&fs, file_path, expected);
+
+    assert_eq!(console.out_buffer.len(), 1);
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "format_package_json",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn format_astro_files() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let astro_file_path = Path::new("file.astro");
+    fs.insert(astro_file_path.into(), ASTRO_FILE_UNFORMATTED.as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from([("format"), astro_file_path.as_os_str().to_str().unwrap()].as_slice()),
+    );
+
+    assert!(result.is_err(), "run_cli returned {result:?}");
+
+    assert_file_contents(&fs, astro_file_path, ASTRO_FILE_UNFORMATTED);
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "format_astro_files",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn format_astro_files_write() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let astro_file_path = Path::new("file.astro");
+    fs.insert(astro_file_path.into(), ASTRO_FILE_UNFORMATTED.as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                "format",
+                "--write",
+                astro_file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_file_contents(&fs, astro_file_path, ASTRO_FILE_FORMATTED);
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "format_astro_files_write",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn format_empty_astro_files_write() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let astro_file_path = Path::new("file.astro");
+    fs.insert(astro_file_path.into(), "<div></div>".as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                "format",
+                "--write",
+                astro_file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_file_contents(&fs, astro_file_path, "<div></div>");
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "format_empty_astro_files_write",
         fs,
         console,
         result,

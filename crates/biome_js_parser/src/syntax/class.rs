@@ -40,7 +40,7 @@ use biome_js_syntax::JsSyntaxKind::*;
 use biome_js_syntax::TextSize;
 use biome_js_syntax::{JsSyntaxKind, T};
 use biome_parser::parse_lists::ParseNodeList;
-use biome_parser::parse_recovery::ParseRecovery;
+use biome_parser::parse_recovery::ParseRecoveryTokenSet;
 use biome_parser::ParserProgress;
 use biome_rowan::{SyntaxKind, TextRange};
 use bitflags::bitflags;
@@ -173,7 +173,7 @@ pub(super) fn parse_class_declaration(
                 "Classes can only be declared at top level or inside a block",
                 class.range(p),
             )
-            .hint("wrap the class in a block statement"),
+            .with_hint("wrap the class in a block statement"),
         );
         class.change_to_bogus(p)
     }
@@ -274,6 +274,9 @@ fn parse_class(p: &mut JsParser, kind: ClassKind, decorator_list: ParsedSyntax) 
 
     // test ts ts_class_type_parameters
     // class BuildError<A, B, C> {}
+
+    // test_err ts ts_class_type_parameters_errors
+    // class BuildError<> {}
     TypeScript
         .parse_exclusive_syntax(
             p,
@@ -339,7 +342,7 @@ fn eat_class_heritage_clause(p: &mut JsParser) {
                                         "'extends' clause must precede 'implements' clause.",
                                         current.range(p),
                                     )
-                                    .detail(
+                                    .with_detail(
                                         first_implements.range(p),
                                         "This is where implements was found",
                                     ),
@@ -351,7 +354,7 @@ fn eat_class_heritage_clause(p: &mut JsParser) {
                     }
                     Some(first_extends) => p.error(
                         p.err_builder("'extends' clause already seen.", current.range(p))
-                            .detail(first_extends.range(p), "first 'extends' clause"),
+                            .with_detail(first_extends.range(p), "first 'extends' clause"),
                     ),
                 }
             }
@@ -374,7 +377,10 @@ fn eat_class_heritage_clause(p: &mut JsParser) {
                     Some(first_implements) => {
                         p.error(
                             p.err_builder("'implements' clause already seen.", current.range(p))
-                                .detail(first_implements.range(p), "first 'implements' clause"),
+                                .with_detail(
+                                    first_implements.range(p),
+                                    "first 'implements' clause",
+                                ),
                         );
                     }
                 }
@@ -473,9 +479,9 @@ impl ParseNodeList for ClassMembersList {
         //     let a=;
         //   };
         // };
-        parsed_element.or_recover(
+        parsed_element.or_recover_with_token_set(
             p,
-            &ParseRecovery::new(
+            &ParseRecoveryTokenSet::new(
                 JS_BOGUS_MEMBER,
                 token_set![
                     T![;],
@@ -730,6 +736,12 @@ fn parse_class_member_impl(
         // class Test {
         //  get a<A>(): A {}
         //  set a<A>(value: A) {}
+        // }
+
+        // test_err ts ts_getter_setter_type_parameters_errors
+        // class Test {
+        //  get a<>(): A {}
+        //  set a<>(value: A) {}
         // }
         if let Present(type_parameters) = parse_ts_type_parameters(p, TypeContext::default()) {
             p.error(ts_accessor_type_parameters_error(p, &type_parameters))
@@ -1035,7 +1047,7 @@ fn parse_property_class_member_body(
                 p.error(p.err_builder(
                     "In ambient contexts, properties cannot have both a type annotation and an initializer.",
                     initializer.range(p),
-                ).detail(annotation.range(p), "The type annotation is here:"));
+                ).with_detail(annotation.range(p), "The type annotation is here:"));
             }
         }
     }
@@ -1146,8 +1158,8 @@ fn parse_ts_property_annotation(
                     "class properties cannot be both optional and definite",
                     definite_range,
                 )
-                .detail(definite_range, "The definite")
-                .detail(optional_range, "The optional");
+                .with_detail(definite_range, "The definite")
+                .with_detail(optional_range, "The optional");
 
             p.error(error);
 
@@ -1524,6 +1536,7 @@ fn parse_constructor_class_member_body(
 
     // test_err ts ts_constructor_type_parameters
     // class A { constructor<A>(b) {} }
+    // class A { constructor<>(b) {} }
     if let Present(type_parameters) = parse_ts_type_parameters(p, TypeContext::default()) {
         p.error(ts_constructor_type_parameters_error(p, &type_parameters));
     }
@@ -1709,7 +1722,8 @@ pub(crate) fn is_nth_at_modifier(p: &mut JsParser, n: usize, constructor_paramet
         return false;
     }
 
-    if p.has_nth_preceding_line_break(n + 1) {
+    // The new line is allowed between the `static` and the member name.
+    if !matches!(p.nth(n), T![static]) && p.has_nth_preceding_line_break(n + 1) {
         return false;
     }
 
@@ -1734,6 +1748,13 @@ fn is_at_constructor(p: &JsParser, modifiers: &ClassMemberModifiers) -> bool {
 // class A { public() {} }
 // class A { static protected() {} }
 // class A { static }
+
+// test js class_member_modifiers_no_asi
+// class A {
+//   static
+//   foo() {}
+// }
+//
 
 /// Parses all possible modifiers regardless of what the current member is. It's up to the caller
 /// to create diagnostics for not allowed modifiers.

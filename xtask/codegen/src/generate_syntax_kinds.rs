@@ -1,8 +1,7 @@
+use crate::kind_src::KindsSrc;
 use crate::{to_upper_snake_case, LanguageKind, Result};
 use proc_macro2::{Literal, Punct, Spacing};
 use quote::{format_ident, quote};
-
-use super::kinds_src::KindsSrc;
 
 pub fn generate_syntax_kinds(grammar: KindsSrc, language_kind: LanguageKind) -> Result<String> {
     let syntax_kind = language_kind.syntax_kind();
@@ -29,22 +28,29 @@ pub fn generate_syntax_kinds(grammar: KindsSrc, language_kind: LanguageKind) -> 
         .map(|(_token, name)| format_ident!("{}", name))
         .collect::<Vec<_>>();
 
-    let full_keywords_values = &grammar.keywords;
-    let full_keywords = full_keywords_values
+    // color-profile
+    let all_keywords = &grammar.keywords;
+    // color-profile => "color-profile"
+    let all_keyword_strings = all_keywords.iter().map(|name| (*name).to_string());
+    let all_keyword_to_strings = all_keywords.iter().map(|name| (*name).to_string()).clone();
+    // we need to replace "-" with "_" for the keywords
+    // e.g. we have `color-profile` in css but it's an invalid ident in rust code
+    // color-profile => "color_profile"
+    let all_keywords_values = all_keywords
+        .iter()
+        .map(|kw| kw.replace('-', "_"))
+        .collect::<Vec<_>>();
+    // "color_profile" => COLOR_PROFILE_KW
+    let full_keywords = all_keywords_values
         .iter()
         .map(|kw| format_ident!("{}_KW", to_upper_snake_case(kw)))
         .collect::<Vec<_>>();
 
-    let all_keywords_values = grammar.keywords.to_vec();
+    // "color_profile" => color_profile
     let all_keywords_idents = all_keywords_values
         .iter()
         .map(|kw| format_ident!("{}", kw))
         .collect::<Vec<_>>();
-    let all_keywords = all_keywords_values
-        .iter()
-        .map(|name| format_ident!("{}_KW", to_upper_snake_case(name)))
-        .collect::<Vec<_>>();
-    let all_keyword_strings = all_keywords_values.iter().map(|name| (*name).to_string());
 
     let literals = grammar
         .literals
@@ -82,7 +88,7 @@ pub fn generate_syntax_kinds(grammar: KindsSrc, language_kind: LanguageKind) -> 
                 pub const fn to_string(&self) -> Option<&'static str> {
                     let tok = match self {
                         #(#punctuation => #punctuation_strings,)*
-                        #(#all_keywords => #all_keyword_strings,)*
+                        #(#full_keywords => #all_keyword_to_strings,)*
                         JS_STRING_LITERAL => "string literal",
                         _ => return None,
                     };
@@ -95,7 +101,7 @@ pub fn generate_syntax_kinds(grammar: KindsSrc, language_kind: LanguageKind) -> 
                 pub const fn to_string(&self) -> Option<&'static str> {
                     let tok = match self {
                         #(#punctuation => #punctuation_strings,)*
-                        #(#all_keywords => #all_keyword_strings,)*
+                        #(#full_keywords => #all_keyword_to_strings,)*
                         CSS_STRING_LITERAL => "string literal",
                         _ => return None,
                     };
@@ -108,8 +114,21 @@ pub fn generate_syntax_kinds(grammar: KindsSrc, language_kind: LanguageKind) -> 
                 pub const fn to_string(&self) -> Option<&'static str> {
                     let tok = match self {
                         #(#punctuation => #punctuation_strings,)*
-                        #(#all_keywords => #all_keyword_strings,)*
+                        #(#full_keywords => #all_keyword_to_strings,)*
                         JSON_STRING_LITERAL => "string literal",
+                        _ => return None,
+                    };
+                    Some(tok)
+                }
+            }
+        }
+        LanguageKind::Html => {
+            quote! {
+                pub const fn to_string(&self) -> Option<&'static str> {
+                    let tok = match self {
+                        #(#punctuation => #punctuation_strings,)*
+                        #(#full_keywords => #all_keyword_to_strings,)*
+                        HTML_STRING_LITERAL => "string literal",
                         _ => return None,
                     };
                     Some(tok)
@@ -129,10 +148,13 @@ pub fn generate_syntax_kinds(grammar: KindsSrc, language_kind: LanguageKind) -> 
             // but never end up in the final tree
             #[doc(hidden)]
             TOMBSTONE,
-            /// Marks the end of the file.May have trivia attached
+            /// Marks the end of the file. May have trivia attached
             EOF,
+            /// Any Unicode BOM character that may be present at the start of
+            /// a file.
+            UNICODE_BOM,
             #(#punctuation,)*
-            #(#all_keywords,)*
+            #(#full_keywords,)*
             #(#literals,)*
             #(#tokens,)*
             #(#nodes,)*
@@ -167,7 +189,7 @@ pub fn generate_syntax_kinds(grammar: KindsSrc, language_kind: LanguageKind) -> 
 
             pub fn from_keyword(ident: &str) -> Option<#syntax_kind> {
                 let kw = match ident {
-                    #(#full_keywords_values => #full_keywords,)*
+                    #(#all_keyword_strings => #full_keywords,)*
                     _ => return None,
                 };
                 Some(kw)
@@ -181,9 +203,10 @@ pub fn generate_syntax_kinds(grammar: KindsSrc, language_kind: LanguageKind) -> 
         #[macro_export]
         macro_rules! T {
             #([#punctuation_values] => { $crate::#syntax_kind::#punctuation };)*
-            #([#all_keywords_idents] => { $crate::#syntax_kind::#all_keywords };)*
+            #([#all_keywords_idents] => { $crate::#syntax_kind::#full_keywords };)*
             [ident] => { $crate::#syntax_kind::IDENT };
             [EOF] => { $crate::#syntax_kind::EOF };
+            [UNICODE_BOM] => { $crate::#syntax_kind::UNICODE_BOM };
             [#] => { $crate::#syntax_kind::HASH };
         }
     };

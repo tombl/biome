@@ -328,6 +328,11 @@ foo(
   ) => {}
 );
 
+export default (element) => async (Component, props, slotted, { client }) => {
+  delete props['class'];
+  if (!element.hasAttribute('ssr')) return;
+};
+
 ```
 
 
@@ -340,6 +345,7 @@ foo(
 -----
 Indent style: Tab
 Indent width: 2
+Line ending: LF
 Line width: 80
 Quote style: Double Quotes
 JSX quote style: Double Quotes
@@ -347,6 +353,9 @@ Quote properties: As needed
 Trailing comma: All
 Semicolons: Always
 Arrow parentheses: Always
+Bracket spacing: true
+Bracket same line: false
+Attribute Position: Auto
 -----
 
 ```js
@@ -651,6 +660,12 @@ foo(
 			}),
 	) => {},
 );
+
+export default (element) =>
+	async (Component, props, slotted, { client }) => {
+		delete props["class"];
+		if (!element.hasAttribute("ssr")) return;
+	};
 ```
 
 ## Output 2
@@ -658,6 +673,7 @@ foo(
 -----
 Indent style: Tab
 Indent width: 2
+Line ending: LF
 Line width: 80
 Quote style: Double Quotes
 JSX quote style: Double Quotes
@@ -665,6 +681,9 @@ Quote properties: As needed
 Trailing comma: All
 Semicolons: Always
 Arrow parentheses: As needed
+Bracket spacing: true
+Bracket same line: false
+Attribute Position: Auto
 -----
 
 ```js
@@ -969,6 +988,12 @@ foo(
 			}),
 	) => {},
 );
+
+export default element =>
+	async (Component, props, slotted, { client }) => {
+		delete props["class"];
+		if (!element.hasAttribute("ssr")) return;
+	};
 ```
 
 

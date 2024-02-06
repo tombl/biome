@@ -2,7 +2,7 @@ mod check;
 mod format;
 mod lint;
 mod organize_imports;
-mod workspace_file;
+pub(crate) mod workspace_file;
 
 use crate::execute::diagnostics::{ResultExt, UnhandledDiagnostic};
 use crate::execute::process_file::check::check_file;
@@ -11,7 +11,7 @@ use crate::execute::process_file::lint::lint;
 use crate::execute::traverse::TraversalOptions;
 use crate::execute::TraversalMode;
 use crate::CliDiagnostic;
-use biome_diagnostics::{category, DiagnosticExt, Error};
+use biome_diagnostics::{category, DiagnosticExt, DiagnosticTags, Error};
 use biome_fs::RomePath;
 use biome_service::workspace::{FeatureName, FeaturesBuilder, SupportKind, SupportsFeatureParams};
 use std::marker::PhantomData;
@@ -23,6 +23,8 @@ pub(crate) enum FileStatus {
     Success,
     Message(Message),
     Ignored,
+    /// Files that belong to other tools and shouldn't be touched
+    Protected(String),
 }
 
 /// Wrapper type for messages that can be printed during the traversal process
@@ -123,11 +125,22 @@ pub(crate) fn process_file(ctx: &TraversalOptions, path: &Path) -> FileResult {
                     .with_organize_imports()
                     .build(),
             })
-            .with_file_path_and_code(
+            .with_file_path_and_code_and_tags(
                 path.display().to_string(),
                 category!("files/missingHandler"),
+                DiagnosticTags::VERBOSE,
             )?;
 
+        // first we stop if there are some files that don't have ALL features enabled, e.g. images, fonts, etc.
+        if file_features.is_ignored() || file_features.is_not_enabled() {
+            return Ok(FileStatus::Ignored);
+        } else if file_features.is_not_supported() {
+            return Err(Message::from(
+                UnhandledDiagnostic.with_file_path(path.display().to_string()),
+            ));
+        }
+
+        // then we pick the specific features for this file
         let unsupported_reason = match ctx.execution.traversal_mode() {
             TraversalMode::Check { .. } => file_features
                 .support_kind_for(&FeatureName::Lint)
@@ -206,12 +219,16 @@ pub(crate) fn process_file(ctx: &TraversalOptions, path: &Path) -> FileResult {
                 SupportKind::FeatureNotEnabled | SupportKind::Ignored => {
                     return Ok(FileStatus::Ignored)
                 }
+                SupportKind::Protected => {
+                    return Ok(FileStatus::Protected(path.display().to_string()))
+                }
                 SupportKind::Supported => {}
             };
         }
 
         let shared_context = &SharedTraversalOptions::new(ctx);
         ctx.increment_processed();
+
         match ctx.execution.traversal_mode {
             TraversalMode::Lint { .. } => {
                 // the unsupported case should be handled already at this point
@@ -224,7 +241,9 @@ pub(crate) fn process_file(ctx: &TraversalOptions, path: &Path) -> FileResult {
             TraversalMode::Check { .. } => {
                 check_file(shared_context, path, &file_features, category!("check"))
             }
-            TraversalMode::CI => check_file(shared_context, path, &file_features, category!("ci")),
+            TraversalMode::CI { .. } => {
+                check_file(shared_context, path, &file_features, category!("ci"))
+            }
             TraversalMode::Migrate { .. } => {
                 unreachable!("The migration should not be called for this file")
             }

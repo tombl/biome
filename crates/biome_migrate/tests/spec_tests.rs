@@ -59,9 +59,9 @@ pub(crate) fn analyze_and_snap(
 
     let mut diagnostics = Vec::new();
     let mut code_fixes = Vec::new();
-
+    let version = "1.5.0";
     let (_, errors) =
-        biome_migrate::migrate_configuration(&root.value().unwrap(), input_file, |event| {
+        biome_migrate::migrate_configuration(&root, input_file, version.to_string(), |event| {
             if let Some(mut diag) = event.diagnostic() {
                 for action in event.actions() {
                     if !action.is_suppression() {
@@ -93,6 +93,7 @@ pub(crate) fn analyze_and_snap(
         input_code,
         diagnostics.as_slice(),
         code_fixes.as_slice(),
+        "json",
     );
 
     diagnostics.len()

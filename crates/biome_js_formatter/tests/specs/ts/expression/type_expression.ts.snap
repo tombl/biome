@@ -111,6 +111,8 @@ function test2(a: string):
 type Type01 = 0 extends
     (1 extends 2 ? 3 : 4) ? 5 : 6
     ;
+
+type A<               > = {}
 ```
 
 
@@ -123,6 +125,7 @@ type Type01 = 0 extends
 -----
 Indent style: Tab
 Indent width: 2
+Line ending: LF
 Line width: 80
 Quote style: Double Quotes
 JSX quote style: Double Quotes
@@ -130,6 +133,9 @@ Quote properties: As needed
 Trailing comma: All
 Semicolons: Always
 Arrow parentheses: Always
+Bracket spacing: true
+Bracket same line: false
+Attribute Position: Auto
 -----
 
 ```ts
@@ -243,6 +249,8 @@ type Constructor<T> = new (...args: any[]) => T;
 function test2(a: string): asserts a is string {}
 
 type Type01 = 0 extends (1 extends 2 ? 3 : 4) ? 5 : 6;
+
+type A<> = {};
 ```
 
 

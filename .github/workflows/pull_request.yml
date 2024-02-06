@@ -59,11 +59,11 @@ jobs:
       - name: Checkout PR Branch
         uses: actions/checkout@v4
       - name: Install toolchain
-        run:  rustup toolchain install nightly
+        run: rustup toolchain install nightly
       - name: Install udeps
         run: cargo install cargo-udeps --locked
       - name: Detect unused dependencies using udeps
-        run: cargo +nightly udeps
+        run: cargo +nightly udeps --all-targets
 
   test:
     name: Test
@@ -74,6 +74,11 @@ jobs:
           - os: windows-latest
           - os: ubuntu-latest
     steps:
+      - name: Free Disk Space (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        uses: jlumbroso/free-disk-space@main
+        with:
+          android: true
       - name: Checkout PR branch
         uses: actions/checkout@v4
       - name: Install toolchain
@@ -109,9 +114,9 @@ jobs:
       - name: Build main binary
         run: cargo build -p biome_cli --release
       - name: Install Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
       - name: Cache pnpm modules
         uses: actions/cache@v3
         with:

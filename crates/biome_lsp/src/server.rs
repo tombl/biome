@@ -8,14 +8,15 @@ use crate::utils::{into_lsp_error, panic_to_lsp_error};
 use crate::{handlers, requests};
 use biome_console::markup;
 use biome_diagnostics::panic::PanicError;
-use biome_fs::{BIOME_JSON, ROME_JSON};
+use biome_fs::{FileSystem, OsFileSystem, BIOME_JSON, ROME_JSON};
 use biome_service::workspace::{RageEntry, RageParams, RageResult};
-use biome_service::{workspace, Workspace};
+use biome_service::{workspace, DynRef, Workspace};
 use futures::future::ready;
 use futures::FutureExt;
 use rustc_hash::FxHashMap;
 use serde_json::json;
 use std::panic::RefUnwindSafe;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -269,7 +270,7 @@ impl LanguageServer for LSPServer {
         Ok(init)
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "trace", skip(self))]
     async fn initialized(&self, params: InitializedParams) {
         let _ = params;
 
@@ -296,16 +297,16 @@ impl LanguageServer for LSPServer {
         Ok(())
     }
 
-    /// Called when the user changed the editor settings.
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "trace", skip(self))]
     async fn did_change_configuration(&self, params: DidChangeConfigurationParams) {
         let _ = params;
+        self.session.load_workspace_settings().await;
         self.session.load_extension_settings().await;
         self.setup_capabilities().await;
         self.session.update_all_diagnostics().await;
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "trace", skip(self))]
     async fn did_change_watched_files(&self, params: DidChangeWatchedFilesParams) {
         let file_paths = params
             .changes
@@ -509,8 +510,16 @@ impl ServerFactory {
         }
     }
 
+    pub fn create(&self, config_path: Option<PathBuf>) -> ServerConnection {
+        self.create_with_fs(config_path, DynRef::Owned(Box::<OsFileSystem>::default()))
+    }
+
     /// Create a new [ServerConnection] from this factory
-    pub fn create(&self) -> ServerConnection {
+    pub fn create_with_fs(
+        &self,
+        config_path: Option<PathBuf>,
+        fs: DynRef<'static, dyn FileSystem>,
+    ) -> ServerConnection {
         let workspace = self
             .workspace
             .clone()
@@ -519,7 +528,16 @@ impl ServerFactory {
         let session_key = SessionKey(self.next_session_key.fetch_add(1, Ordering::Relaxed));
 
         let mut builder = LspService::build(move |client| {
-            let session = Session::new(session_key, client, workspace, self.cancellation.clone());
+            let mut session = Session::new(
+                session_key,
+                client,
+                workspace,
+                self.cancellation.clone(),
+                fs,
+            );
+            if let Some(path) = config_path {
+                session.set_config_path(path);
+            }
             let handle = Arc::new(session);
 
             let mut sessions = self.sessions.lock().unwrap();
@@ -545,8 +563,10 @@ impl ServerFactory {
         builder = builder.custom_method("biome/rage", LSPServer::rage);
 
         workspace_method!(builder, file_features);
+        workspace_method!(builder, project_features);
         workspace_method!(builder, is_path_ignored);
         workspace_method!(builder, update_settings);
+        workspace_method!(builder, project_features);
         workspace_method!(builder, open_file);
         workspace_method!(builder, get_syntax_tree);
         workspace_method!(builder, get_control_flow_graph);

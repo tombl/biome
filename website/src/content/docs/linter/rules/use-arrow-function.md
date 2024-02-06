@@ -2,11 +2,13 @@
 title: useArrowFunction (since v1.0.0)
 ---
 
-**Diagnostic Category: `lint/nursery/useArrowFunction`**
+**Diagnostic Category: `lint/complexity/useArrowFunction`**
 
-:::caution
-This rule is part of the [nursery](/linter/rules/#nursery) group.
+:::note
+This rule is recommended by Biome. A diagnostic error will appear when linting your code.
 :::
+
+Inspired from: <a href="https://eslint.org/docs/latest/rules/prefer-arrow-callback" target="_blank"><code>prefer-arrow-callback</code></a>
 
 Use arrow functions over function expressions.
 
@@ -26,7 +28,7 @@ const z = function() {
 }
 ```
 
-<pre class="language-text"><code class="language-text">nursery/useArrowFunction.js:1:11 <a href="https://biomejs.dev/linter/rules/use-arrow-function">lint/nursery/useArrowFunction</a> <span style="color: #000; background-color: #ddd;"> FIXABLE </span> ━━━━━━━━━━━━━━━━━━━━━━━━━━━
+<pre class="language-text"><code class="language-text">complexity/useArrowFunction.js:1:11 <a href="https://biomejs.dev/linter/rules/use-arrow-function">lint/complexity/useArrowFunction</a> <span style="color: #000; background-color: #ddd;"> FIXABLE </span> ━━━━━━━━━━━━━━━━━━━━━
 
 <strong><span style="color: Tomato;">  </span></strong><strong><span style="color: Tomato;">✖</span></strong> <span style="color: Tomato;">This </span><span style="color: Tomato;"><strong>function expression</strong></span><span style="color: Tomato;"> can be turned into an </span><span style="color: Tomato;"><strong>arrow function</strong></span><span style="color: Tomato;">.</span>
   
@@ -55,7 +57,7 @@ const delegatedFetch = async function(url) {
 }
 ```
 
-<pre class="language-text"><code class="language-text">nursery/useArrowFunction.js:1:24 <a href="https://biomejs.dev/linter/rules/use-arrow-function">lint/nursery/useArrowFunction</a> <span style="color: #000; background-color: #ddd;"> FIXABLE </span> ━━━━━━━━━━━━━━━━━━━━━━━━━━━
+<pre class="language-text"><code class="language-text">complexity/useArrowFunction.js:1:24 <a href="https://biomejs.dev/linter/rules/use-arrow-function">lint/complexity/useArrowFunction</a> <span style="color: #000; background-color: #ddd;"> FIXABLE </span> ━━━━━━━━━━━━━━━━━━━━━
 
 <strong><span style="color: Tomato;">  </span></strong><strong><span style="color: Tomato;">✖</span></strong> <span style="color: Tomato;">This </span><span style="color: Tomato;"><strong>function expression</strong></span><span style="color: Tomato;"> can be turned into an </span><span style="color: Tomato;"><strong>arrow function</strong></span><span style="color: Tomato;">.</span>
   
@@ -78,7 +80,7 @@ const delegatedFetch = async function(url) {
   
 </code></pre>
 
-## Valid
+### Valid
 
 ```jsx
 const f = function() {

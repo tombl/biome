@@ -12,7 +12,7 @@ expression: content
 }
 ```
 
-## `tsconfig.json`
+## `somefile.json`
 
 ```json
 
@@ -20,10 +20,21 @@ expression: content
 	
 ```
 
+# Termination Message
+
+```block
+format ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Some errors were emitted while running checks.
+  
+
+
+```
+
 # Emitted Messages
 
 ```block
-tsconfig.json format ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+somefile.json format ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   i Formatter would have printed the following content:
   

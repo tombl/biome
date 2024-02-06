@@ -4,6 +4,8 @@ title: useNamingConvention (since v1.0.0)
 
 **Diagnostic Category: `lint/style/useNamingConvention`**
 
+Inspired from: <a href="https://typescript-eslint.io/rules/naming-convention" target="_blank"><code>naming-convention</code></a>
+
 Enforce naming conventions for everything across a codebase.
 
 Enforcing [naming conventions](https://en.wikipedia.org/wiki/Naming_convention_(programming)) helps to keep the codebase consistent,
@@ -67,6 +69,23 @@ let a_value = 0;
 </code></pre>
 
 ```jsx
+const fooYPosition = 0;
+```
+
+<pre class="language-text"><code class="language-text">style/useNamingConvention.js:1:7 <a href="https://biomejs.dev/linter/rules/use-naming-convention">lint/style/useNamingConvention</a> ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+<strong><span style="color: Orange;">  </span></strong><strong><span style="color: Orange;">⚠</span></strong> <span style="color: Orange;">Two consecutive uppercase characters are not allowed in camelCase and PascalCase because `strictCase` is set to `true`.</span>
+  
+<strong><span style="color: Tomato;">  </span></strong><strong><span style="color: Tomato;">&gt;</span></strong> <strong>1 │ </strong>const fooYPosition = 0;
+   <strong>   │ </strong>      <strong><span style="color: Tomato;">^</span></strong><strong><span style="color: Tomato;">^</span></strong><strong><span style="color: Tomato;">^</span></strong><strong><span style="color: Tomato;">^</span></strong><strong><span style="color: Tomato;">^</span></strong><strong><span style="color: Tomato;">^</span></strong><strong><span style="color: Tomato;">^</span></strong><strong><span style="color: Tomato;">^</span></strong><strong><span style="color: Tomato;">^</span></strong><strong><span style="color: Tomato;">^</span></strong><strong><span style="color: Tomato;">^</span></strong><strong><span style="color: Tomato;">^</span></strong>
+    <strong>2 │ </strong>
+  
+<strong><span style="color: lightgreen;">  </span></strong><strong><span style="color: lightgreen;">ℹ</span></strong> <span style="color: lightgreen;">If you want to use consecutive uppercase characters in camelCase and PascalCase then consider setting `strictCase` option to `false`.
+</span><span style="color: lightgreen;">  </span><span style="color: lightgreen;">  </span><span style="color: lightgreen;"> Check rule </span><span style="color: lightgreen;"><a href="https://biomejs.dev/linter/rules/use-naming-convention#options">options</a></span><span style="color: lightgreen;"> for more inforamtion.</span>
+  
+</code></pre>
+
+```jsx
 function f(FirstParam) {}
 ```
 
@@ -120,10 +139,10 @@ enum Status {
 - A class name is in [`PascalCase`](https://en.wikipedia.org/wiki/Camel_case).
 
 
-- A static property name and a static getter name are in [`camelCase`](https://en.wikipedia.org/wiki/Camel_case) or [`CONSTANT_CASE`](https://en.wikipedia.org/wiki/Snake_case).
+- Static property and static getter names are in [`camelCase`](https://en.wikipedia.org/wiki/Camel_case) or [`CONSTANT_CASE`](https://en.wikipedia.org/wiki/Snake_case).
 
 
-- A class property name and a class method name are in [`camelCase`](https://en.wikipedia.org/wiki/Camel_case).
+- Class property and method names are in [`camelCase`](https://en.wikipedia.org/wiki/Camel_case).
 
 
 
@@ -141,13 +160,13 @@ class Person {
 
 ### TypeScript `type` aliases and `interface`
 
-- A `type` alias and an interface name are in [`PascalCase`](https://en.wikipedia.org/wiki/Camel_case).
+- A `type` alias or an interface name are in [`PascalCase`](https://en.wikipedia.org/wiki/Camel_case).
 
 
-- A property name and a method name in a type or interface are in [`camelCase`](https://en.wikipedia.org/wiki/Camel_case) or [`CONSTANT_CASE`](https://en.wikipedia.org/wiki/Snake_case).
+- Property and method names in a type are in [`camelCase`](https://en.wikipedia.org/wiki/Camel_case).
 
 
-- A `readonly` property name and a getter name can also be in [`CONSTANT_CASE`](https://en.wikipedia.org/wiki/Snake_case).
+- `readonly` property and getter names can also be in [`CONSTANT_CASE`](https://en.wikipedia.org/wiki/Snake_case).
 
 
 
@@ -324,7 +343,7 @@ Default: `true`
 ### enumMemberCase
 
 By default, the rule enforces the naming convention followed by the [TypeScript Compiler team](https://www.typescriptlang.org/docs/handbook/enums.html):
-an `enum` member has to be in [`PascalCase`](https://en.wikipedia.org/wiki/Camel_case).
+an `enum` member is in [`PascalCase`](https://en.wikipedia.org/wiki/Camel_case).
 
 You can enforce another convention by setting `enumMemberCase` option.
 The supported cases are: [`PascalCase`](https://en.wikipedia.org/wiki/Camel_case), [`CONSTANT_CASE`](https://en.wikipedia.org/wiki/Snake_case), and [`camelCase`](https://en.wikipedia.org/wiki/Camel_case).

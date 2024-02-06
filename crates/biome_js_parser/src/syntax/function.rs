@@ -23,7 +23,7 @@ use crate::syntax::typescript::{
 
 use crate::JsSyntaxFeature::TypeScript;
 use crate::ParsedSyntax::{Absent, Present};
-use crate::{JsParser, JsSyntaxFeature, ParseRecovery};
+use crate::{JsParser, JsSyntaxFeature, ParseRecoveryTokenSet};
 use biome_js_syntax::JsSyntaxKind::*;
 use biome_js_syntax::{JsSyntaxKind, TextRange, T};
 use biome_parser::ParserProgress;
@@ -90,7 +90,7 @@ pub(super) fn parse_function_declaration(
             // if (true) function a() {}
             // label1: function b() {}
             // while (true) function c() {}
-            p.error(p.err_builder("In strict mode code, functions can only be declared at top level or inside a block", function.range(p)).hint( "wrap the function in a block statement"));
+            p.error(p.err_builder("In strict mode code, functions can only be declared at top level or inside a block", function.range(p)).with_hint( "wrap the function in a block statement"));
             function.change_to_bogus(p);
         } else if !matches!(context, StatementContext::If | StatementContext::Label) {
             // test js function_in_if_or_labelled_stmt_loose_mode
@@ -99,7 +99,7 @@ pub(super) fn parse_function_declaration(
             // if (true) function b() {} else function c() {}
             // if (true) function d() {}
             // if (true) "test"; else function e() {}
-            p.error(p.err_builder("In non-strict mode code, functions can only be declared at top level, inside a block, or as the body of an if or labelled statement", function.range(p)).hint( "wrap the function in a block statement"));
+            p.error(p.err_builder("In non-strict mode code, functions can only be declared at top level, inside a block, or as the body of an if or labelled statement", function.range(p)).with_hint( "wrap the function in a block statement"));
             function.change_to_bogus(p);
         }
     }
@@ -435,7 +435,7 @@ fn parse_ambient_function(
                 "A 'declare' function cannot have a function body",
                 body.range(p),
             )
-            .hint("remove this body"),
+            .with_hint("remove this body"),
         );
     }
 
@@ -477,7 +477,7 @@ pub(crate) fn parse_ts_type_annotation_or_error(p: &mut JsParser) -> ParsedSynta
                 "return types can only be used in TypeScript files",
                 annotation.range(p),
             )
-            .hint("remove this type annotation")
+            .with_hint("remove this type annotation")
         },
     )
 }
@@ -754,34 +754,37 @@ fn is_parenthesized_arrow_function_expression_impl(
         }
         // potential start of type parameters
         T![<] => {
-            if is_nth_at_type_parameter_modifier(p, n + 1) && !JsSyntaxFeature::Jsx.is_supported(p)
-            {
-                // <const T>...
-                IsParenthesizedArrowFunctionExpression::True
-            } else if !is_nth_at_identifier(p, n + 1) {
-                // <5...
-                IsParenthesizedArrowFunctionExpression::False
-            }
             // test jsx jsx_type_arguments
             // // These may look like a valid arrows but are JSX
             // <A extends>() =</A>;
             // <A extends="B">() =</A>;
             // <A extends ok>() =</A>;
+            // <const A>() =</const>;
+            // <const A extends/>;
+            // <A extends/>;
 
             // test tsx tsx_type_arguments
             // // These are valid type arguments
+            // <A,>() => {};
+            // <const A,>() => {};
             // <A extends B>() => {};
             // <A=string>() => {};
             // <A, B>() => {};
-            // <A extends B<C>>() => {}
+            // <A extends B<C>>() => {};
 
-            // <a... JSX override
-            else if JsSyntaxFeature::Jsx.is_supported(p) {
+            if JsSyntaxFeature::Jsx.is_supported(p) {
+                // Disambiguate between JSX and type parameters
+                // Type parameters of arrow functions accept only the `const` modifier.
+                let n = if p.nth_at(n + 1, T![const]) { n + 1 } else { n };
+                if !is_nth_at_identifier(p, n + 1) {
+                    // <5...
+                    return IsParenthesizedArrowFunctionExpression::False;
+                };
                 match p.nth(n + 2) {
                     T![extends] => {
-                        // `<a extends=` OR `<a extends>` is a JSX start element
+                        // `<a extends=` OR `<a extends/>` OR `<a extends>` is a JSX element
                         // and a `extends` type refinement: `<A extends string>`
-                        if matches!(p.nth(n + 3), T![=] | T![>]) {
+                        if matches!(p.nth(n + 3), T![=] | T![/] | T![>]) {
                             IsParenthesizedArrowFunctionExpression::False
                         }
                         // `<A extends B>` Could be either
@@ -796,6 +799,12 @@ fn is_parenthesized_arrow_function_expression_impl(
                     T![=] | T![,] => IsParenthesizedArrowFunctionExpression::True,
                     _ => IsParenthesizedArrowFunctionExpression::False,
                 }
+            } else if is_nth_at_type_parameter_modifier(p, n + 1) {
+                // <const T>...
+                IsParenthesizedArrowFunctionExpression::True
+            } else if !is_nth_at_identifier(p, n + 1) {
+                // <5...
+                IsParenthesizedArrowFunctionExpression::False
             } else {
                 // <a...
                 IsParenthesizedArrowFunctionExpression::Unknown
@@ -1375,9 +1384,9 @@ pub(super) fn parse_parameters_list(
 
             // test_err js formal_params_invalid
             // function (a++, c) {}
-            let recovered_result = parameter.or_recover(
+            let recovered_result = parameter.or_recover_with_token_set(
                 p,
-                &ParseRecovery::new(
+                &ParseRecoveryTokenSet::new(
                     JS_BOGUS_PARAMETER,
                     token_set![
                         T![ident],

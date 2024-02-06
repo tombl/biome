@@ -4,8 +4,8 @@ use crate::execute::process_file::{
     DiffKind, FileResult, FileStatus, Message, SharedTraversalOptions,
 };
 use crate::execute::TraversalMode;
-use crate::FormatterReportFileDetail;
 use biome_diagnostics::{category, DiagnosticExt};
+use biome_service::file_handlers::ASTRO_FENCE;
 use biome_service::workspace::RuleCategories;
 use std::path::Path;
 use std::sync::atomic::Ordering;
@@ -62,26 +62,32 @@ pub(crate) fn format_with_guard<'ctx>(
                     category!("format"),
                 )?;
 
-            let output = printed.into_code();
+            let mut output = printed.into_code();
 
             // NOTE: ignoring the
             if ignore_errors {
                 return Ok(FileStatus::Ignored);
             }
 
+            if workspace_file.as_extension() == Some("astro") {
+                if output.is_empty() {
+                    return Ok(FileStatus::Ignored);
+                }
+                let mut matches = ASTRO_FENCE.find_iter(&input);
+                if let (Some(start), Some(end)) = (matches.next(), matches.next()) {
+                    output = format!(
+                        "{}{}{}",
+                        &input[..start.end() + 1],
+                        output.as_str(),
+                        &input[end.start()..]
+                    );
+                }
+            }
+
             if output != input {
                 if should_write {
                     workspace_file.update_file(output)?;
                 } else {
-                    if !ctx.execution.should_report_to_terminal() {
-                        ctx.push_format_stat(
-                            workspace_file.path.display().to_string(),
-                            FormatterReportFileDetail {
-                                formatted_content: Some(output.clone()),
-                            },
-                        )
-                    }
-
                     return Ok(FileStatus::Message(Message::Diff {
                         file_name: workspace_file.path.display().to_string(),
                         old: input,

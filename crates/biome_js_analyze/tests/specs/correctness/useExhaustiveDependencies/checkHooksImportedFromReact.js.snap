@@ -3,17 +3,17 @@ source: crates/biome_js_analyze/tests/spec_tests.rs
 expression: checkHooksImportedFromReact.js
 ---
 # Input
-```js
+```jsx
 function MyComponent1() {
   let a = 1;
   React.useEffect(() => {
       console.log(a);
-  });
+  }, []);
 
   // the rule doesn't show the warnings because the hooks are not imported from react.
   useEffect(() => {
     console.log(a);
-  });
+  }, []);
 }
 
 function MyComponent2() {
@@ -22,7 +22,7 @@ function MyComponent2() {
   // the rule doesn't show the warnings because `React` is defined by the user.
   React.useEffect(() => {
       console.log(a);
-  });
+  }, []);
 }
 
 ```
@@ -31,14 +31,14 @@ function MyComponent2() {
 ```
 checkHooksImportedFromReact.js:3:9 lint/correctness/useExhaustiveDependencies ━━━━━━━━━━━━━━━━━━━━━━
 
-  ! This hook do not specify all of its dependencies.
+  ! This hook does not specify all of its dependencies: a
   
     1 │ function MyComponent1() {
     2 │   let a = 1;
   > 3 │   React.useEffect(() => {
       │         ^^^^^^^^^
     4 │       console.log(a);
-    5 │   });
+    5 │   }, []);
   
   i This dependency is not specified in the hook dependency list.
   
@@ -46,8 +46,10 @@ checkHooksImportedFromReact.js:3:9 lint/correctness/useExhaustiveDependencies �
     3 │   React.useEffect(() => {
   > 4 │       console.log(a);
       │                   ^
-    5 │   });
+    5 │   }, []);
     6 │ 
+  
+  i Either include it or remove the dependency array
   
 
 ```

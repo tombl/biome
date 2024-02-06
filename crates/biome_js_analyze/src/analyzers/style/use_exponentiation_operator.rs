@@ -1,7 +1,7 @@
 use crate::semantic_services::Semantic;
 use crate::JsRuleAction;
 use biome_analyze::context::RuleContext;
-use biome_analyze::{declare_rule, ActionCategory, FixKind, Rule, RuleDiagnostic};
+use biome_analyze::{declare_rule, ActionCategory, FixKind, Rule, RuleDiagnostic, RuleSource};
 use biome_console::markup;
 use biome_diagnostics::Applicability;
 use biome_js_factory::{make, syntax::T};
@@ -11,7 +11,8 @@ use biome_js_syntax::{
     OperatorPrecedence,
 };
 use biome_rowan::{
-    trim_leading_trivia_pieces, AstNode, AstSeparatedList, BatchMutationExt, SyntaxResult,
+    chain_trivia_pieces, trim_leading_trivia_pieces, AstNode, AstSeparatedList, BatchMutationExt,
+    SyntaxResult,
 };
 
 declare_rule! {
@@ -19,8 +20,6 @@ declare_rule! {
     ///
     /// Introduced in ES2016, the infix exponentiation operator `**` is an alternative for the standard `Math.pow` function.
     /// Infix notation is considered to be more readable and thus more preferable than the function notation.
-    ///
-    /// Source: https://eslint.org/docs/latest/rules/prefer-exponentiation-operator
     ///
     /// ## Examples
     ///
@@ -57,6 +56,7 @@ declare_rule! {
     pub(crate) UseExponentiationOperator {
         version: "1.0.0",
         name: "useExponentiationOperator",
+        source: RuleSource::Eslint("prefer-exponentiation-operator"),
         recommended: true,
         fix_kind: FixKind::Unsafe,
     }
@@ -96,7 +96,7 @@ impl Rule for UseExponentiationOperator {
         let node = ctx.query();
         let args = node.arguments().ok()?;
         let [Some(AnyJsCallArgument::AnyJsExpression(base)), Some(AnyJsCallArgument::AnyJsExpression(exponent)), None] =
-            node.get_arguments_by_index([0, 1, 2])
+            node.arguments().ok()?.get_arguments_by_index([0, 1, 2])
         else {
             return None;
         };
@@ -110,17 +110,35 @@ impl Rule for UseExponentiationOperator {
         } else {
             exponent
         };
-        let comma_separator = args.args().separators().next()?.ok()?;
+        let l_paren = args.l_paren_token().ok()?;
+        let mut separators = args.args().separators();
+        let separator = separators.next()?.ok()?;
+        let trailing_separator = separators.next();
+        let r_paren = args.r_paren_token().ok()?;
         // Transfer comments before and after `base` and `exponent`
         // which are associated with the comma or a paren.
         let base = base
-            .prepend_trivia_pieces(args.l_paren_token().ok()?.trailing_trivia().pieces())?
-            .append_trivia_pieces(comma_separator.leading_trivia().pieces())?;
+            .prepend_trivia_pieces(chain_trivia_pieces(
+                l_paren.leading_trivia().pieces(),
+                l_paren.trailing_trivia().pieces(),
+            ))?
+            .append_trivia_pieces(chain_trivia_pieces(
+                separator.leading_trivia().pieces(),
+                separator.leading_trivia().pieces(),
+            ))?;
+        let exponent = if let Some(Ok(trailing_separator)) = trailing_separator {
+            exponent.append_trivia_pieces(chain_trivia_pieces(
+                trailing_separator.leading_trivia().pieces(),
+                trailing_separator.trailing_trivia().pieces(),
+            ))?
+        } else {
+            exponent
+        };
         let exponent = exponent
             .prepend_trivia_pieces(trim_leading_trivia_pieces(
-                comma_separator.trailing_trivia().pieces(),
+                separator.trailing_trivia().pieces(),
             ))?
-            .append_trivia_pieces(args.r_paren_token().ok()?.leading_trivia().pieces())?;
+            .append_trivia_pieces(r_paren.leading_trivia().pieces())?;
         let mut mutation = ctx.root().begin();
         let new_node = AnyJsExpression::from(make::js_binary_expression(
             base,

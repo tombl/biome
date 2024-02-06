@@ -8,13 +8,11 @@ use crate::{
     JsRuleAction,
 };
 use biome_analyze::{
-    context::RuleContext, declare_rule, ActionCategory, FixKind, Rule, RuleDiagnostic,
+    context::RuleContext, declare_rule, ActionCategory, FixKind, Rule, RuleDiagnostic, RuleSource,
+    RuleSourceKind,
 };
 use biome_console::markup;
-use biome_deserialize::{
-    json::{has_only_known_keys, with_only_known_variants, VisitJsonNode},
-    DeserializationDiagnostic, VisitNode,
-};
+use biome_deserialize_macros::Deserializable;
 use biome_diagnostics::Applicability;
 use biome_js_semantic::CanBeImportedExported;
 use biome_js_syntax::{
@@ -23,12 +21,10 @@ use biome_js_syntax::{
     JsLiteralMemberName, JsPrivateClassMemberName, JsSyntaxKind, JsSyntaxToken,
     JsVariableDeclarator, JsVariableKind, TsEnumMember, TsIdentifierBinding, TsTypeParameterName,
 };
-use biome_js_unicode_table::is_js_ident;
-use biome_json_syntax::JsonLanguage;
 use biome_rowan::{
-    declare_node_union, AstNode, AstNodeList, BatchMutationExt, SyntaxNode, SyntaxResult, TokenText,
+    declare_node_union, AstNode, AstNodeList, BatchMutationExt, SyntaxResult, TokenText,
 };
-use bpaf::Bpaf;
+use biome_unicode_table::is_js_ident;
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 
@@ -81,6 +77,10 @@ declare_rule! {
     /// ```
     ///
     /// ```js,expect_diagnostic
+    /// const fooYPosition = 0;
+    /// ```
+    ///
+    /// ```js,expect_diagnostic
     /// function f(FirstParam) {}
     /// ```
     ///
@@ -115,9 +115,9 @@ declare_rule! {
     ///
     /// - A class name is in [`PascalCase`].
     ///
-    /// - A static property name and a static getter name are in [`camelCase`] or [`CONSTANT_CASE`].
+    /// - Static property and static getter names are in [`camelCase`] or [`CONSTANT_CASE`].
     ///
-    /// - A class property name and a class method name are in [`camelCase`].
+    /// - Class property and method names are in [`camelCase`].
     ///
     /// ```js
     /// class Person {
@@ -133,11 +133,11 @@ declare_rule! {
     ///
     /// ### TypeScript `type` aliases and `interface`
     ///
-    /// - A `type` alias and an interface name are in [`PascalCase`].
+    /// - A `type` alias or an interface name are in [`PascalCase`].
     ///
-    /// - A property name and a method name in a type or interface are in [`camelCase`] or [`CONSTANT_CASE`].
+    /// - Property and method names in a type are in [`camelCase`].
     ///
-    /// - A `readonly` property name and a getter name can also be in [`CONSTANT_CASE`].
+    /// - `readonly` property and getter names can also be in [`CONSTANT_CASE`].
     ///
     /// ```ts
     /// type Named = {
@@ -262,7 +262,7 @@ declare_rule! {
     /// ### enumMemberCase
     ///
     /// By default, the rule enforces the naming convention followed by the [TypeScript Compiler team](https://www.typescriptlang.org/docs/handbook/enums.html):
-    /// an `enum` member has to be in [`PascalCase`].
+    /// an `enum` member is in [`PascalCase`].
     ///
     /// You can enforce another convention by setting `enumMemberCase` option.
     /// The supported cases are: [`PascalCase`], [`CONSTANT_CASE`], and [`camelCase`].
@@ -274,6 +274,8 @@ declare_rule! {
     pub(crate)  UseNamingConvention {
         version: "1.0.0",
         name: "useNamingConvention",
+        source: RuleSource::EslintTypeScript("naming-convention"),
+        source_kind: RuleSourceKind::Inspired,
         recommended: false,
         fix_kind: FixKind::Safe,
     }
@@ -324,6 +326,7 @@ impl Rule for UseNamingConvention {
             element,
             suggested_name,
         } = state;
+        let options = ctx.options();
         let name = ctx.query().name().ok()?;
         let name = name.text();
         let trimmed_name = trim_underscore_dollar(name);
@@ -338,6 +341,23 @@ impl Rule for UseNamingConvention {
         } else {
             markup! {""}.to_owned()
         };
+
+        if options.strict_case {
+            let case_type = Case::identify(name, false);
+            let case_strict = Case::identify(name, true);
+            if case_type == Case::Camel && case_strict == Case::Unknown {
+                return Some(RuleDiagnostic::new(
+                    rule_category!(),
+                    ctx.query().syntax().text_trimmed_range(),
+                    markup! {
+                        "Two consecutive uppercase characters are not allowed in camelCase and PascalCase because `strictCase` is set to `true`."
+                    },
+                ).note(markup! {
+                    "If you want to use consecutive uppercase characters in camelCase and PascalCase then consider setting `strictCase` option to `false`.\n Check rule "<Hyperlink href="https://biomejs.dev/linter/rules/use-naming-convention#options">"options"</Hyperlink>" for more inforamtion."
+                }));
+            }
+        }
+
         Some(RuleDiagnostic::new(
             rule_category!(),
             ctx.query().syntax().text_trimmed_range(),
@@ -436,13 +456,12 @@ pub(crate) struct State {
 }
 
 /// Rule's options.
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Bpaf)]
+#[derive(Debug, Clone, Deserialize, Deserializable, Eq, PartialEq, Serialize)]
 #[cfg_attr(feature = "schemars", derive(JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct NamingConventionOptions {
     /// If `false`, then consecutive uppercase are allowed in _camel_ and _pascal_ cases.
     /// This does not affect other [Case].
-    #[bpaf(hide)]
     #[serde(
         default = "default_strict_case",
         skip_serializing_if = "is_default_strict_case"
@@ -450,7 +469,6 @@ pub struct NamingConventionOptions {
     pub strict_case: bool,
 
     /// Allowed cases for _TypeScript_ `enum` member names.
-    #[bpaf(hide)]
     #[serde(default, skip_serializing_if = "is_default")]
     pub enum_member_case: EnumMemberCase,
 }
@@ -467,10 +485,6 @@ fn is_default<T: Default + Eq>(value: &T) -> bool {
     value == &T::default()
 }
 
-impl NamingConventionOptions {
-    pub(crate) const KNOWN_KEYS: &'static [&'static str] = &["strictCase", "enumMemberCase"];
-}
-
 impl Default for NamingConventionOptions {
     fn default() -> Self {
         Self {
@@ -480,50 +494,8 @@ impl Default for NamingConventionOptions {
     }
 }
 
-// Required by [Bpaf].
-impl FromStr for NamingConventionOptions {
-    type Err = &'static str;
-
-    fn from_str(_s: &str) -> Result<Self, Self::Err> {
-        // WARNING: should not be used.
-        Ok(Self::default())
-    }
-}
-
-impl VisitNode<JsonLanguage> for NamingConventionOptions {
-    fn visit_member_name(
-        &mut self,
-        node: &SyntaxNode<JsonLanguage>,
-        diagnostics: &mut Vec<DeserializationDiagnostic>,
-    ) -> Option<()> {
-        has_only_known_keys(node, Self::KNOWN_KEYS, diagnostics)
-    }
-
-    fn visit_map(
-        &mut self,
-        key: &SyntaxNode<JsonLanguage>,
-        value: &SyntaxNode<JsonLanguage>,
-        diagnostics: &mut Vec<DeserializationDiagnostic>,
-    ) -> Option<()> {
-        let (name, value) = self.get_key_and_value(key, value, diagnostics)?;
-        let name_text = name.text();
-        match name_text {
-            "strictCase" => {
-                self.strict_case = self.map_to_boolean(&value, name_text, diagnostics)?
-            }
-            "enumMemberCase" => {
-                let mut enum_member_case = EnumMemberCase::default();
-                self.map_to_known_string(&value, name_text, &mut enum_member_case, diagnostics)?;
-                self.enum_member_case = enum_member_case;
-            }
-            _ => (),
-        }
-        Some(())
-    }
-}
-
 /// Supported cases for TypeScript `enum` member names.
-#[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Deserializable, Eq, PartialEq, Serialize)]
 #[cfg_attr(feature = "schemars", derive(JsonSchema))]
 pub enum EnumMemberCase {
     /// PascalCase
@@ -540,34 +512,16 @@ pub enum EnumMemberCase {
     Camel,
 }
 
-impl EnumMemberCase {
-    pub const KNOWN_VALUES: &'static [&'static str] = &["camelCase", "CONSTANT_CASE", "PascalCase"];
-}
-
-/// Required by [Bpaf].
 impl FromStr for EnumMemberCase {
     type Err = &'static str;
 
-    fn from_str(_s: &str) -> Result<Self, Self::Err> {
-        // WARNING: should not be used.
-        Ok(EnumMemberCase::default())
-    }
-}
-
-impl VisitNode<JsonLanguage> for EnumMemberCase {
-    fn visit_member_value(
-        &mut self,
-        node: &SyntaxNode<JsonLanguage>,
-        diagnostics: &mut Vec<DeserializationDiagnostic>,
-    ) -> Option<()> {
-        let node = with_only_known_variants(node, Self::KNOWN_VALUES, diagnostics)?;
-        match node.inner_string_text().ok()?.text() {
-            "PascalCase" => *self = Self::Pascal,
-            "CONSTANT_CASE" => *self = Self::Constant,
-            "camelCase" => *self = Self::Camel,
-            _ => (),
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "PascalCase" => Ok(Self::Pascal),
+            "CONSTANT_CASE" => Ok(Self::Constant),
+            "camelCase" => Ok(Self::Camel),
+            _ => Err("Value not supported for enum member case"),
         }
-        Some(())
     }
 }
 
@@ -798,8 +752,7 @@ impl Named {
             AnyJsBindingDeclaration::JsCatchDeclaration(_) => Some(Named::CatchParameter),
             AnyJsBindingDeclaration::TsPropertyParameter(_) => Some(Named::ParameterProperty),
             AnyJsBindingDeclaration::TsIndexSignatureParameter(_) => Some(Named::IndexParameter),
-            AnyJsBindingDeclaration::JsNamespaceImportSpecifier(_)
-            | AnyJsBindingDeclaration::JsImportNamespaceClause(_) => Some(Named::ImportNamespace),
+            AnyJsBindingDeclaration::JsNamespaceImportSpecifier(_) => Some(Named::ImportNamespace),
             AnyJsBindingDeclaration::JsFunctionDeclaration(_)
             | AnyJsBindingDeclaration::JsFunctionExpression(_)
             | AnyJsBindingDeclaration::JsFunctionExportDefaultDeclaration(_)
@@ -807,8 +760,7 @@ impl Named {
             | AnyJsBindingDeclaration::TsDeclareFunctionExportDefaultDeclaration(_) => {
                 Some(Named::Function)
             }
-            AnyJsBindingDeclaration::JsImportDefaultClause(_)
-            | AnyJsBindingDeclaration::TsImportEqualsDeclaration(_)
+            AnyJsBindingDeclaration::TsImportEqualsDeclaration(_)
             | AnyJsBindingDeclaration::JsDefaultImportSpecifier(_)
             | AnyJsBindingDeclaration::JsNamedImportSpecifier(_) => Some(Named::ImportAlias),
             AnyJsBindingDeclaration::TsModuleDeclaration(_) => Some(Named::Namespace),
@@ -830,12 +782,19 @@ impl Named {
     }
 
     fn from_variable_declarator(var: &JsVariableDeclarator) -> Option<Named> {
-        let is_top_level_level = matches!(
-            var.syntax()
-                .ancestors()
-                .find_map(AnyJsControlFlowRoot::cast),
-            Some(AnyJsControlFlowRoot::JsModule(_) | AnyJsControlFlowRoot::JsScript(_))
-        );
+        let is_top_level_level = var
+            .syntax()
+            .ancestors()
+            .find(|x| AnyJsControlFlowRoot::can_cast(x.kind()))
+            .is_some_and(|x| {
+                matches!(
+                    x.kind(),
+                    JsSyntaxKind::JS_MODULE
+                        | JsSyntaxKind::JS_SCRIPT
+                        | JsSyntaxKind::TS_MODULE_DECLARATION
+                        | JsSyntaxKind::TS_EXTERNAL_MODULE_DECLARATION
+                )
+            });
         let var_declaration = var
             .syntax()
             .ancestors()

@@ -17,7 +17,7 @@ use crate::syntax::jsx::jsx_parse_errors::{
 };
 use crate::syntax::typescript::TypeContext;
 use crate::JsSyntaxFeature::TypeScript;
-use crate::{parser::RecoveryResult, JsParser, ParseRecovery, ParsedSyntax};
+use crate::{parser::RecoveryResult, JsParser, ParseRecoveryTokenSet, ParsedSyntax};
 use crate::{Absent, Present};
 
 use super::typescript::parse_ts_type_arguments;
@@ -202,8 +202,8 @@ fn expect_closing_fragment(
                 "JSX fragment has no corresponding closing tag.",
                 opening_range,
             )
-            .detail(opening_range, "Opening fragment")
-            .detail(name.range(p), "Closing tag"),
+            .with_detail(opening_range, "Opening fragment")
+            .with_detail(name.range(p), "Closing tag"),
         );
     }
 
@@ -338,9 +338,9 @@ impl ParseNodeList for JsxChildrenList {
     }
 
     fn recover(&mut self, p: &mut JsParser, parsed_element: ParsedSyntax) -> RecoveryResult {
-        parsed_element.or_recover(
+        parsed_element.or_recover_with_token_set(
             p,
-            &ParseRecovery::new(
+            &ParseRecoveryTokenSet::new(
                 JsSyntaxKind::JS_BOGUS,
                 token_set![T![<], T![>], T!['{'], T!['}']],
             ),
@@ -504,9 +504,9 @@ impl ParseNodeList for JsxAttributeList {
     }
 
     fn recover(&mut self, p: &mut JsParser, parsed_element: ParsedSyntax) -> RecoveryResult {
-        parsed_element.or_recover(
+        parsed_element.or_recover_with_token_set(
             p,
-            &ParseRecovery::new(
+            &ParseRecoveryTokenSet::new(
                 JsSyntaxKind::JS_BOGUS,
                 token_set![T![/], T![>], T![<], T!['{'], T!['}'], T![...], T![ident]],
             ),

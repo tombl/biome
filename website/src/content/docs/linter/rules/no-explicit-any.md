@@ -8,6 +8,8 @@ title: noExplicitAny (since v1.0.0)
 This rule is recommended by Biome. A diagnostic error will appear when linting your code.
 :::
 
+Source: <a href="https://typescript-eslint.io/rules/no-explicit-any" target="_blank"><code>no-explicit-any</code></a>
+
 Disallow the `any` type usage.
 
 The `any` type in TypeScript is a dangerous "escape hatch" from the type system.
@@ -16,7 +18,8 @@ Using `any` disables many type checking rules and is generally best used only as
 TypeScript's `--noImplicitAny` compiler option prevents an implied `any`,
 but doesn't prevent `any` from being explicitly used the way this rule does.
 
-Source: https://typescript-eslint.io/rules/no-explicit-any
+Sometimes you can use the type `unknown` instead of the type `any`.
+It also accepts any value, however it requires to check that a property exists before calling it.
 
 ## Examples
 
@@ -82,16 +85,13 @@ let variable2 = 1;
 ```
 
 ```ts
-class SomeClass {
+class SomeClass<T extends any> {
   message: Array<Array<unknown>>;
 }
 ```
 
 ```ts
 function fn(param: Array<Array<unknown>>): Array<unknown> {}
-```
-
-```
 ```
 
 ## Related links

@@ -152,3 +152,18 @@ a =
         a: { t: c = b       }, loreum, ipsurm
     } = {}
 
+
+const { looooooooooooooooooooooooooooooooooooooooooooongValue } =
+	await setup(2);
+
+function* f() {
+	const { looooooooooooooooooooooooooooooooooooooooooooongValue } =
+		yield setup(2);
+}
+
+export const MSG_WITH_REMOVED_ESCAPE_CHARACTER_TEST =
+  goog.getMsg("That\'s all we know");
+
+export const MSG_WITHOUT_ESCAPE_CHARACTER_TEST = goog.getMsg(
+	"That's all we know",
+);

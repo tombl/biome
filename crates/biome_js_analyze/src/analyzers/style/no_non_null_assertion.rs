@@ -1,6 +1,7 @@
 use crate::JsRuleAction;
 use biome_analyze::{
     context::RuleContext, declare_rule, ActionCategory, Ast, FixKind, Rule, RuleDiagnostic,
+    RuleSource,
 };
 use biome_console::markup;
 use biome_diagnostics::Applicability;
@@ -47,6 +48,7 @@ declare_rule! {
     pub(crate) NoNonNullAssertion {
         version: "1.0.0",
         name: "noNonNullAssertion",
+        source: RuleSource::EslintTypeScript("no-non-null-assertion"),
         recommended: true,
         fix_kind: FixKind::Unsafe,
     }
@@ -100,7 +102,13 @@ impl Rule for NoNonNullAssertion {
                 let old_node = AnyJsExpression::TsNonNullAssertionExpression(node.clone());
 
                 match node.parent::<AnyJsExpression>()? {
-                    AnyJsExpression::JsComputedMemberExpression(parent) => {
+                    AnyJsExpression::JsComputedMemberExpression(parent)
+                        if parent.object().is_ok_and(|object| {
+                            object
+                                .as_ts_non_null_assertion_expression()
+                                .is_some_and(|object| object == node)
+                        }) =>
+                    {
                         if parent.is_optional() {
                             // object!?["prop"] --> object?.["prop"]
                             mutation.replace_node(old_node, assertion_less_expr);

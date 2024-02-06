@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
 use biome_analyze::context::RuleContext;
-use biome_analyze::{declare_rule, ActionCategory, FixKind, Rule, RuleDiagnostic};
+use biome_analyze::{declare_rule, ActionCategory, FixKind, Rule, RuleDiagnostic, RuleSource};
 use biome_console::markup;
 use biome_diagnostics::Applicability;
 use biome_js_factory::make;
@@ -40,8 +40,9 @@ declare_rule! {
     ///
     ///   To represent an empty object, you should use `{ [k: string]: never }` or `Record<string, never>`.
     ///
-    ///   To avoid any confusion, the rule forbids the use of the type `{}`,e except in two situation.
-    ///   In type constraints to restrict a generic type to non-nullable types:
+    ///   To avoid any confusion, the rule forbids the use of the type `{}`, except in two situations:
+    ///
+    ///   1. In type constraints to restrict a generic type to non-nullable types:
     ///
     ///   ```ts
     ///   function f<T extends {}>(x: T) {
@@ -49,7 +50,7 @@ declare_rule! {
     ///   }
     ///   ```
     ///
-    ///   And in a type intersection to narrow a type to its non-nullable equivalent type:
+    ///   2. In a type intersection to narrow a type to its non-nullable equivalent type:
     ///
     ///   ```ts
     ///   type NonNullableMyType = MyType & {};
@@ -60,8 +61,6 @@ declare_rule! {
     ///   ```ts
     ///   type NonNullableMyType = NonNullable<MyType>;
     ///   ```
-    ///
-    /// Source: https://typescript-eslint.io/rules/ban-types
     ///
     /// ## Examples
     ///
@@ -89,10 +88,10 @@ declare_rule! {
     /// let tuple: [boolean, string] = [false, "foo"];
     /// ```
     ///
-    /// ```
     pub(crate) NoBannedTypes {
         version: "1.0.0",
         name: "noBannedTypes",
+        source: RuleSource::EslintTypeScript("ban-types"),
         recommended: true,
         fix_kind: FixKind::Safe,
     }

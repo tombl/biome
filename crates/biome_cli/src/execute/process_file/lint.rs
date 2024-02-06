@@ -23,7 +23,7 @@ pub(crate) fn lint_with_guard<'ctx>(
             let mut input = workspace_file.input()?;
 
             if let Some(fix_mode) = ctx.execution.as_fix_file_mode() {
-                let fixed = workspace_file
+                let fix_result = workspace_file
                     .guard()
                     .fix_file(*fix_mode, false)
                     .with_file_path_and_code(
@@ -32,20 +32,23 @@ pub(crate) fn lint_with_guard<'ctx>(
                     )?;
 
                 ctx.push_message(Message::SkippedFixes {
-                    skipped_suggested_fixes: fixed.skipped_suggested_fixes,
+                    skipped_suggested_fixes: fix_result.skipped_suggested_fixes,
                 });
 
-                if fixed.code != input {
-                    workspace_file.update_file(fixed.code)?;
+                if fix_result.code != input {
+                    workspace_file.update_file(fix_result.code)?;
                     input = workspace_file.input()?;
                 }
-                errors = fixed.errors;
+                errors = fix_result.errors;
             }
 
             let max_diagnostics = ctx.remaining_diagnostics.load(Ordering::Relaxed);
             let pull_diagnostics_result = workspace_file
                 .guard()
-                .pull_diagnostics(RuleCategories::LINT, max_diagnostics.into())
+                .pull_diagnostics(
+                    RuleCategories::LINT | RuleCategories::SYNTAX,
+                    max_diagnostics.into(),
+                )
                 .with_file_path_and_code(
                     workspace_file.path.display().to_string(),
                     category!("lint"),

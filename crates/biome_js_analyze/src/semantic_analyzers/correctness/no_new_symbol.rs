@@ -1,6 +1,6 @@
 use crate::{semantic_services::Semantic, JsRuleAction};
 use biome_analyze::{
-    context::RuleContext, declare_rule, ActionCategory, FixKind, Rule, RuleDiagnostic,
+    context::RuleContext, declare_rule, ActionCategory, FixKind, Rule, RuleDiagnostic, RuleSource,
 };
 use biome_console::markup;
 use biome_diagnostics::Applicability;
@@ -12,8 +12,6 @@ declare_rule! {
     /// Disallow `new` operators with the `Symbol` object.
     ///
     /// `Symbol` cannot be instantiated. This results in throwing a `TypeError`.
-    ///
-    /// Source: https://eslint.org/docs/latest/rules/no-new-symbol
     ///
     /// ## Examples
     ///
@@ -35,7 +33,9 @@ declare_rule! {
     pub(crate) NoNewSymbol {
         version: "1.0.0",
         name: "noNewSymbol",
-        recommended: true,
+        recommended: false,
+        source: RuleSource::Eslint("no-new-symbol"),
+        deprecated: "Use `noInvalidNewBuiltin` instead.",
         fix_kind: FixKind::Unsafe,
     }
 }

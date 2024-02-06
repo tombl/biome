@@ -2,9 +2,45 @@
 
 We can use help in a bunch of areas and any help is greatly appreciated!
 
+## Table of Contents
+
+- [🚀 Contributing](#-contributing)
+  - [Table of Contents](#table-of-contents)
+  - [Asking questions, making proposals](#asking-questions-making-proposals)
+  - [Reporting bugs](#reporting-bugs)
+  - [Getting Started](#getting-started)
+  - [Install the required tools](#install-the-required-tools)
+  - [Crates development](#crates-development)
+    - [Analyzers and lint rules](#analyzers-and-lint-rules)
+    - [Parser](#parser)
+    - [Formatter](#formatter)
+    - [Testing](#testing)
+    - [Checks](#checks)
+      - [Generated files](#generated-files)
+        - [`cargo codegen grammar`](#cargo-codegen-grammar)
+        - [`cargo codegen test`](#cargo-codegen-test)
+        - [`cargo codegen analyzer`](#cargo-codegen-analyzer)
+    - [crate dependencies](#crate-dependencies)
+  - [Node.js development](#nodejs-development)
+  - [Website development](#website-development)
+    - [Translations](#translations)
+  - [Commit messages](#commit-messages)
+  - [Creating pull requests](#creating-pull-requests)
+    - [Changelog](#changelog)
+      - [Writing a changelog line](#writing-a-changelog-line)
+    - [Documentation](#documentation)
+    - [Magic comments](#magic-comments)
+    - [Versioning](#versioning)
+  - [Releasing](#releasing)
+  - [Resources](#resources)
+  - [Current Members](#current-members)
+    - [Lead team](#lead-team)
+    - [Core Contributors team](#core-contributors-team)
+    - [Maintainers team](#maintainers-team)
+
 ## Asking questions, making proposals
 
-If you have any questions, proposals, or feedbacks, open a [GitHub discussion](https://github.com/bare-ts/tools/discussions).
+If you have any questions, proposals, or feedbacks, open a [GitHub discussion](https://github.com/biomejs/biome/discussions).
 Make sure your comment adds value: [don't post a comment just to get attention](https://jacobtomlinson.dev/posts/2022/dont-be-that-open-source-user-dont-be-me/).
 
 Our [Discord server](https://discord.gg/BypW39g6Yc) is open for help and more ad-hoc discussion.
@@ -134,10 +170,9 @@ The source is generated from the [`ungram` files](https://github.com/biomejs/bio
 ##### `cargo codegen test`
 
 This command will create new tests for JS or JSON parser.
-These tests are generated from inline comments found inside the source code. 
+These tests are generated from inline comments found inside the source code.
 
 On the other hand, we are moving away from this approach and have a straightforward process in other parser implementation like CSS.
-
 
 ##### `cargo codegen analyzer`
 
@@ -148,99 +183,6 @@ This command will detect linter rules declared in the `analyzers`, `assists` and
 [Workspace dependencies](https://doc.rust-lang.org/cargo/reference/workspaces.html#the-dependencies-table) are used, and many dependencies are defined in Cargo.toml in the root.
 
 Internal crates are loaded with `workspace = true` for each crate. About `dev-dependencies`, we use [path dependencies](https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#specifying-path-dependencies) to avoid requiring the published version of these crates.
-
-## VS Code extension development
-
-The Biome language server is the binary crate `biome` which can be built using the command:
-
-```bash
-cargo build --bin biome
-```
-
-If benchmarking the language server, be sure to build with the `--release` flag.
-
-The VS Code extension can be installed from the [Marketplace](https://marketplace.visualstudio.com/items?itemName=biomejs.biome) and can be used with a development build of the language server by setting the `"biome.lspBin"` VS Code setting to the path of the binary:
-
-```json
-{
-  "biome.lspBin": "/path/to/biome/target/debug/biome"
-}
-```
-
-Please note that Windows disallows modifying an executable while it's running,
-meaning you won't be able to recompile the Biome binary once the extension was activated in your editor.
-
-The server is spawned as a background daemon, and continues to run even after the editor is closed.
-
-To stop the running daemon instance use the `biome stop` command, with the editor closed as the extension
-will try to restart it otherwise.
-
-To build the VS Code extension from source, navigate to the `editors/vscode` directory and run:
-
-```bash
-npm install
-npm run build
-```
-
-This will create a `biome_lsp.vsix` which you can install into VS Code by running:
-
-```bash
-npm run install-extension
-```
-
-The `"biome.lspBin"` VS Code setting will still need to be set as described above.
-
-When the extension is running, it will connect to a daemon server - or it will bootstrap one.
-
-When you apply changes to the binary, you need to do two things:
-
-- compile the binary
-- kill the daemon process, so you can spawn a new server session
-  with the new changes
-
-When the daemon is running, it's possible to inspect its logs in the folder `biome-logs`, placed
-in the temporary folder of the operative system.
-
-### Debugging the VS Code extension
-
-The Biome VS Code extension can be debugged by running the `Debug Extension` launch configuration
-in VS Code. This will compile the extension, watch for modifications and start a separate VS Code
-instance with only the Biome extension installed.
-
-### User files
-
-If files specific to your local development environment should be ignored, please add these files to a global git ignore file rather than to a git ignore file within Biome.
-
-You can find more information on this process [here](https://help.github.com/en/github/using-git/ignoring-files#configuring-ignored-files-for-all-repositories-on-your-computer).
-
-## Intellij plugin development
-
-To start development from source, navigate to the `editors/intellij` directory.
-
-Build and run the plugin requires:
-
-- Java development kit 17+
-- IntelliJ IDEA Ultimate edition
-
-### Running the plugin on IDEA
-```bash
-./gradlew runIde
-```
-
-### Build the plugin
-```bash
-./gradlew buildPlugin
-```
-
-### UI Testing intellij plugin
-
-Before start testing the plugin you will need to start IDE by invoking the `./gradlew runIdeForUiTests &` and wait IDE startup
-
-You can now run the test task:
-
-```bash
-./gradlew test
-```
 
 ## Node.js development
 
@@ -263,13 +205,11 @@ The tests are run against the compiled files, which means that you need to run t
 ## Website development
 
 The [Biome website](https://biomejs.dev/) is built with [Astro](https://astro.build).
-To start a development server you can run the following commands:
+To start a development please check our [README](./website/README.md)
 
-```bash
-cd website
-pnpm install
-pnpm start
-```
+### Translations
+
+For more information on how to help with translation, please see the [translation contribution guidelines for our docs](./website/TRANSLATIONS.md).
 
 ## Commit messages
 
@@ -288,7 +228,7 @@ The following commit prefixes are supported:
 
 Below are examples of well-formatted commits:
 
-```
+```txt
 feat(compiler): implement parsing for new type of files
 fix: fix nasty unhandled error
 docs: fix link to website page
@@ -298,7 +238,7 @@ test(lint): add more cases to handle invalid rules
 ## Creating pull requests
 
 When creating a new pull request, it's preferable to use a conventional commit-formatted title, as this title will be used as the default commit message on the squashed commit after merging.
-See the [dedicated section](#Commit-messages) about conventional commit format.
+See the [dedicated section](#commit-messages) about conventional commit format.
 
 Please use the template provided.
 
@@ -329,8 +269,6 @@ Here's a sample of the headings:
 ### Linter
 
 ### Parser
-
-### VSCode
 ```
 
 When you edit a blank section:
@@ -355,7 +293,7 @@ Make sure that the created subsections are ordered in the following order:
 Because the website displays the changelog, you should update the website using the following command:
 
 ```sh
-just codegen-website
+just gen-web
 ```
 
 #### Writing a changelog line
@@ -373,12 +311,6 @@ If in doubt, take a look to existing changelog lines.
 
 If your PR requires some update on the website (new features, breaking changes, etc.), you should create a new PR once the previous PR is successfully merged.
 When adding new features, the documentation should be part of a new PR, which will be merged right before the release.
-
-### Magic comments
-
-- `!bench_parser` benchmarks the parser's runtime performance and writes a comment with the results;
-- `!bench_formatter` benchmarks the formatter runtime performance and writes a comment with the results;
-- `!bench_analyzer` benchmarks the analyzer runtime performance and writes a comment with the results;
 
 ### Versioning
 
@@ -403,18 +335,22 @@ When releasing a new version of a Biome, follow these steps:
 
 1. [ ] Update `version` in [Biome's `package.json`](./packages/@biomejs/biome/package.json) if applicable.
 
-1. [ ] Update `version` in [Biome's LSP package.json](./editors/vscode/package.json) if applicable.
-   Note that the LSP follows a [distinct versioning scheme](https://biomejs.dev/internals/versioning/#visual-studio-code-extension).
+2. [ ] **Update to the same `version` in all crates** if you publish crates. (`Cargo.toml` and `crates/**/Cargo.toml`)
 
-1. [ ] Update `version` in each published crates if applicable. (`Cargo.toml` and `crates/**/Cargo.toml`)
-
-1. [ ] Linter rules have a `version` metadata directly defined in their implementation.
+3. [ ] Linter rules have a `version` metadata directly defined in their implementation.
    This field is set to `next` for newly created rules.
    This field must be updated to the new version.
-   Then execute `just codegen-linter`.
+   Then execute `just gen-lint`.
 
-1. [ ] Once the PR is merged, the CI will trigger the `Release: *` workflows. Once these workflows finish compiling the final artefact, **they need to be approved manually**.
+4. [ ] Once the PR is merged, the CI will trigger the `Release: *` workflows. Once these workflows finish compiling the final artefact, **they need to be approved manually**.
 
+## Resources
+
+We have several resources explaining about Biome. They will help you understand the project and codebase.
+
+- [Rust Dublin October 2023 - Biome - YouTube](https://youtu.be/stxiUYmHn0s?si=C9cMsc93nNrZa-r1)
+- [Rome, a Modern Toolchain! by Emanuele Stoppa - GitNation](https://portal.gitnation.org/contents/rome-a-modern-toolchain)
+- [How to create a lint rule in Biome](https://www.youtube.com/watch?v=zfzMO3nW_Wo&t=343s)
 
 ## Current Members
 
@@ -427,12 +363,16 @@ Members are listed in alphabetical order. Members are free to use the full name,
 
 ### Core Contributors team
 
-- [Hiroki Ihoriya @unvalley](https://github.com/unvalley)
 - [Daiki Nishikawa @nissy-dev](https://github.com/nissy-dev)
 - [Denis Bezrukov @denbezrukov](https://github.com/denbezrukov)
+- [Hiroki Ihoriya @unvalley](https://github.com/unvalley)
+- [Jon Egeland @faultyserver](https://github.com/faultyserver)
+- [Nicolas Hedger @nhedger](https://github.com/nhedger)
 
 ### Maintainers team
 
-- [Nicolas Hedger @nhedger](https://github.com/nhedger)
-- [Victor Teles @victor-teles](https://github.com/victor-teles)
+- [Arend van Beelen @arendjr](https://github.com/arendjr)
 - [Madeline Gurriarán @SuperchupuDev](https://github.com/SuperchupuDev)
+- [Takayuki Maeda @TaKO8Ki](https://github.com/TaKO8Ki)
+- [Vasu Singh @vasucp1207](https://github.com/vasucp1207)
+- [Victor Teles @victor-teles](https://github.com/victor-teles)

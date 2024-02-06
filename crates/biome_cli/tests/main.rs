@@ -7,13 +7,11 @@ mod snap_test;
 #[cfg(test)]
 use snap_test::assert_cli_snapshot;
 
-use bpaf::ParseFailure;
-use std::path::Path;
-
 use biome_cli::{biome_command, CliDiagnostic, CliSession};
 use biome_console::{markup, BufferConsole, Console, ConsoleExt};
 use biome_fs::{FileSystem, MemoryFileSystem};
 use biome_service::{App, DynRef};
+use bpaf::ParseFailure;
 
 const UNFORMATTED: &str = "  statement(  )  ";
 const FORMATTED: &str = "statement();\n";
@@ -282,108 +280,61 @@ mod configuration {
         let result = run_cli(
             DynRef::Borrowed(&mut fs),
             &mut console,
-            Args::from([("check"), ("file.js")].as_slice()),
+            Args::from(&["check", "file.js"]),
         );
 
         assert!(result.is_err(), "run_cli returned {result:?}");
     }
-}
-
-mod reporter_json {
-    use super::*;
-    use crate::snap_test::SnapshotPayload;
-    use crate::UNFORMATTED;
-    use biome_fs::FileSystemExt;
-    use bpaf::Args;
 
     #[test]
-    fn reports_formatter_check_mode() {
+    fn override_globals() {
         let mut fs = MemoryFileSystem::default();
         let mut console = BufferConsole::default();
 
-        let file_path = Path::new("format.js");
-        fs.insert(file_path.into(), UNFORMATTED.as_bytes());
+        fs.insert(
+            Path::new("biome.json").into(),
+            r#"{
+                "linter": {
+                    "enabled": true,
+                    "rules": {
+                        "correctness": {
+                            "noUndeclaredVariables": "error"
+                        }
+                    }
+                },
+                "javascript": {
+                    "globals": ["React"]
+                },
+                "overrides": [{
+                    "include": ["tests"],
+                    "javascript": {
+                        "globals": ["test", "it"]
+                    }
+                }]
+            }"#
+            .as_bytes(),
+        );
+        fs.insert(
+            Path::new("tests/test.js").into(),
+            r#"test("globals", () => {
+    it("uses React", () => {
+        React.useMemo();
+    });
+});"#
+                .as_bytes(),
+        );
 
         let result = run_cli(
             DynRef::Borrowed(&mut fs),
             &mut console,
-            Args::from(
-                [
-                    ("format"),
-                    ("--json"),
-                    file_path.as_os_str().to_str().unwrap(),
-                ]
-                .as_slice(),
-            ),
+            Args::from(&["lint", "tests/test.js"]),
         );
 
-        eprintln!("{:?}", console.out_buffer);
-
-        assert!(result.is_ok(), "run_cli returned {result:?}");
-
-        let mut file = fs
-            .open(file_path)
-            .expect("formatting target file was removed by the CLI");
-
-        let mut content = String::new();
-        file.read_to_string(&mut content)
-            .expect("failed to read file from memory FS");
-
-        assert_eq!(content, UNFORMATTED);
-
-        assert_eq!(console.out_buffer.len(), 1);
-
-        drop(file);
-        assert_cli_snapshot(SnapshotPayload::new(
-            module_path!(),
-            "reports_formatter_check_mode",
-            fs,
-            console,
-            result,
-        ));
-    }
-
-    #[test]
-    fn reports_formatter_write() {
-        let mut fs = MemoryFileSystem::default();
-        let mut console = BufferConsole::default();
-
-        let file_path = Path::new("format.js");
-        fs.insert(file_path.into(), UNFORMATTED.as_bytes());
-
-        let result = run_cli(
-            DynRef::Borrowed(&mut fs),
-            &mut console,
-            Args::from(
-                [
-                    "format",
-                    "--write",
-                    "--json",
-                    file_path.as_os_str().to_str().unwrap(),
-                ]
-                .as_slice(),
-            ),
-        );
-
-        assert!(result.is_ok(), "run_cli returned {result:?}");
-
-        let mut file = fs
-            .open(file_path)
-            .expect("formatting target file was removed by the CLI");
-
-        let mut content = String::new();
-        file.read_to_string(&mut content)
-            .expect("failed to read file from memory FS");
-
-        assert_eq!(content, FORMATTED);
-
-        assert_eq!(console.out_buffer.len(), 1);
-
-        drop(file);
+        assert!(result.is_err(), "run_cli returned {result:?}");
 
         assert_cli_snapshot(SnapshotPayload::new(
             module_path!(),
-            "reports_formatter_write",
+            "override_globals",
             fs,
             console,
             result,
@@ -407,7 +358,7 @@ pub(crate) fn run_cli<'app>(
     };
 
     let factory = ServerFactory::default();
-    let connection = factory.create();
+    let connection = factory.create(None);
 
     let runtime = Runtime::new().expect("failed to create runtime");
 

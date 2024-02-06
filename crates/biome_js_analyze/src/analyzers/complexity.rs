@@ -16,9 +16,11 @@ pub(crate) mod no_useless_switch_case;
 pub(crate) mod no_useless_type_constraint;
 pub(crate) mod no_void;
 pub(crate) mod no_with;
+pub(crate) mod use_arrow_function;
 pub(crate) mod use_flat_map;
 pub(crate) mod use_literal_keys;
 pub(crate) mod use_optional_chain;
+pub(crate) mod use_regex_literals;
 pub(crate) mod use_simple_number_keys;
 pub(crate) mod use_simplified_logic_expression;
 
@@ -40,9 +42,11 @@ declare_group! {
             self :: no_useless_type_constraint :: NoUselessTypeConstraint ,
             self :: no_void :: NoVoid ,
             self :: no_with :: NoWith ,
+            self :: use_arrow_function :: UseArrowFunction ,
             self :: use_flat_map :: UseFlatMap ,
             self :: use_literal_keys :: UseLiteralKeys ,
             self :: use_optional_chain :: UseOptionalChain ,
+            self :: use_regex_literals :: UseRegexLiterals ,
             self :: use_simple_number_keys :: UseSimpleNumberKeys ,
             self :: use_simplified_logic_expression :: UseSimplifiedLogicExpression ,
         ]

@@ -1,4 +1,5 @@
 JsModule {
+    bom_token: missing (optional),
     interpreter_token: missing (optional),
     directives: JsDirectiveList [],
     items: JsModuleItemList [
@@ -42,8 +43,9 @@ JsModule {
 
 0: JS_MODULE@0..22
   0: (empty)
-  1: JS_DIRECTIVE_LIST@0..0
-  2: JS_MODULE_ITEM_LIST@0..21
+  1: (empty)
+  2: JS_DIRECTIVE_LIST@0..0
+  3: JS_MODULE_ITEM_LIST@0..21
     0: JS_CLASS_DECLARATION@0..19
       0: JS_DECORATOR_LIST@0..0
       1: (empty)
@@ -67,7 +69,7 @@ JsModule {
       9: R_CURLY@18..19 "}" [] []
     1: JS_BOGUS_STATEMENT@19..21
       0: R_CURLY@19..21 "}" [Newline("\n")] []
-  3: EOF@21..22 "" [Newline("\n")] []
+  4: EOF@21..22 "" [Newline("\n")] []
 --
 method_getter_err.js:2:2 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -82,7 +84,7 @@ method_getter_err.js:2:2 parse ━━━━━━━━━━━━━━━━�
 --
 method_getter_err.js:2:6 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  × expected an identifier, a string literal, a number literal, a private field name, or a computed name but instead found '{'
+  × Expected an identifier, a string literal, a number literal, a private field name, or a computed name but instead found '{'.
   
     1 │ class foo {
   > 2 │  get {}
@@ -90,7 +92,7 @@ method_getter_err.js:2:6 parse ━━━━━━━━━━━━━━━━�
     3 │ }
     4 │ 
   
-  i Expected an identifier, a string literal, a number literal, a private field name, or a computed name here
+  i Expected an identifier, a string literal, a number literal, a private field name, or a computed name here.
   
     1 │ class foo {
   > 2 │  get {}
@@ -101,7 +103,7 @@ method_getter_err.js:2:6 parse ━━━━━━━━━━━━━━━━�
 --
 method_getter_err.js:3:1 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  × expected a statement but instead found '}'
+  × Expected a statement but instead found '}'.
   
     1 │ class foo {
     2 │  get {}
@@ -109,7 +111,7 @@ method_getter_err.js:3:1 parse ━━━━━━━━━━━━━━━━�
       │ ^
     4 │ 
   
-  i Expected a statement here
+  i Expected a statement here.
   
     1 │ class foo {
     2 │  get {}

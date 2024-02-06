@@ -11,9 +11,9 @@ use biome_fs::OsFileSystem;
 use biome_service::{App, DynRef, Workspace, WorkspaceRef};
 use std::env;
 
+mod changed;
 mod cli_options;
 mod commands;
-mod configuration;
 mod diagnostics;
 mod execute;
 mod logging;
@@ -21,7 +21,6 @@ mod metrics;
 mod panic;
 mod reports;
 mod service;
-mod vcs;
 
 use crate::cli_options::ColorsArg;
 use crate::commands::check::CheckCommandPayload;
@@ -38,6 +37,9 @@ pub use reports::{
     Report, ReportDiagnostic, ReportDiff, ReportErrorKind, ReportKind,
 };
 pub use service::{open_transport, SocketTransport};
+
+#[cfg(debug_assertions)]
+pub use crate::commands::daemon::biome_log_dir;
 
 pub(crate) const VERSION: &str = match option_env!("BIOME_VERSION") {
     Some(version) => version,
@@ -57,7 +59,7 @@ impl<'app> CliSession<'app> {
     ) -> Result<Self, CliDiagnostic> {
         Ok(Self {
             app: App::new(
-                DynRef::Owned(Box::new(OsFileSystem)),
+                DynRef::Owned(Box::<OsFileSystem>::default()),
                 console,
                 WorkspaceRef::Borrowed(workspace),
             ),
@@ -74,30 +76,34 @@ impl<'app> CliSession<'app> {
         let result = match command {
             BiomeCommand::Version(_) => commands::version::full_version(self),
             BiomeCommand::Rage(_, daemon_logs) => commands::rage::rage(self, daemon_logs),
-            BiomeCommand::Start => commands::daemon::start(self),
+            BiomeCommand::Start(config_path) => commands::daemon::start(self, config_path),
             BiomeCommand::Stop => commands::daemon::stop(self),
             BiomeCommand::Check {
                 apply,
                 apply_unsafe,
                 cli_options,
-                configuration: rome_configuration,
+                configuration,
                 paths,
                 stdin_file_path,
                 linter_enabled,
                 organize_imports_enabled,
                 formatter_enabled,
+                changed,
+                since,
             } => commands::check::check(
                 self,
                 CheckCommandPayload {
                     apply_unsafe,
                     apply,
                     cli_options,
-                    configuration: rome_configuration,
+                    configuration,
                     paths,
                     stdin_file_path,
                     linter_enabled,
                     organize_imports_enabled,
                     formatter_enabled,
+                    changed,
+                    since,
                 },
             ),
             BiomeCommand::Lint {
@@ -109,6 +115,8 @@ impl<'app> CliSession<'app> {
                 stdin_file_path,
                 vcs_configuration,
                 files_configuration,
+                changed,
+                since,
             } => commands::lint::lint(
                 self,
                 LintCommandPayload {
@@ -120,24 +128,30 @@ impl<'app> CliSession<'app> {
                     stdin_file_path,
                     vcs_configuration,
                     files_configuration,
+                    changed,
+                    since,
                 },
             ),
             BiomeCommand::Ci {
                 linter_enabled,
                 formatter_enabled,
                 organize_imports_enabled,
-                configuration: rome_configuration,
+                configuration,
                 paths,
                 cli_options,
+                changed,
+                since,
             } => commands::ci::ci(
                 self,
                 CiCommandPayload {
                     linter_enabled,
                     formatter_enabled,
                     organize_imports_enabled,
-                    rome_configuration,
+                    configuration,
                     paths,
                     cli_options,
+                    changed,
+                    since,
                 },
             ),
             BiomeCommand::Format {
@@ -150,6 +164,9 @@ impl<'app> CliSession<'app> {
                 vcs_configuration,
                 files_configuration,
                 json_formatter,
+                css_formatter,
+                changed,
+                since,
             } => commands::format::format(
                 self,
                 FormatCommandPayload {
@@ -162,16 +179,30 @@ impl<'app> CliSession<'app> {
                     vcs_configuration,
                     files_configuration,
                     json_formatter,
+                    css_formatter,
+                    changed,
+                    since,
                 },
             ),
+            BiomeCommand::Explain { doc } => commands::explain::explain(self, doc),
             BiomeCommand::Init => commands::init::init(self),
-            BiomeCommand::LspProxy(_) => commands::daemon::lsp_proxy(),
-            BiomeCommand::Migrate(cli_options, write) => {
-                commands::migrate::migrate(self, cli_options, write)
-            }
-            BiomeCommand::RunServer { stop_on_disconnect } => {
-                commands::daemon::run_server(stop_on_disconnect)
-            }
+            BiomeCommand::LspProxy(config_path) => commands::daemon::lsp_proxy(config_path),
+            BiomeCommand::Migrate {
+                cli_options,
+                write,
+                sub_command,
+            } => commands::migrate::migrate(
+                self,
+                cli_options,
+                write,
+                sub_command
+                    .map(|sub_command| sub_command.is_prettier())
+                    .unwrap_or_default(),
+            ),
+            BiomeCommand::RunServer {
+                stop_on_disconnect,
+                config_path,
+            } => commands::daemon::run_server(stop_on_disconnect, config_path),
             BiomeCommand::PrintSocket => commands::daemon::print_socket(),
         };
 

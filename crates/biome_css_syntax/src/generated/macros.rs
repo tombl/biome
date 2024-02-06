@@ -16,57 +16,12 @@ macro_rules! map_syntax_node {
     ($ node : expr , $ pattern : pat => $ body : expr) => {
         match $node {
             node => match $crate::CssSyntaxNode::kind(&node) {
-                $crate::CssSyntaxKind::CSS_ANY_FUNCTION => {
-                    let $pattern = unsafe { $crate::CssAnyFunction::new_unchecked(node) };
+                $crate::CssSyntaxKind::CSS_ALL_PROPERTY => {
+                    let $pattern = unsafe { $crate::CssAllProperty::new_unchecked(node) };
                     $body
                 }
-                $crate::CssSyntaxKind::CSS_AT_KEYFRAMES => {
-                    let $pattern = unsafe { $crate::CssAtKeyframes::new_unchecked(node) };
-                    $body
-                }
-                $crate::CssSyntaxKind::CSS_AT_KEYFRAMES_BODY => {
-                    let $pattern = unsafe { $crate::CssAtKeyframesBody::new_unchecked(node) };
-                    $body
-                }
-                $crate::CssSyntaxKind::CSS_AT_MEDIA => {
-                    let $pattern = unsafe { $crate::CssAtMedia::new_unchecked(node) };
-                    $body
-                }
-                $crate::CssSyntaxKind::CSS_AT_MEDIA_QUERY => {
-                    let $pattern = unsafe { $crate::CssAtMediaQuery::new_unchecked(node) };
-                    $body
-                }
-                $crate::CssSyntaxKind::CSS_AT_MEDIA_QUERY_CONSEQUENT => {
-                    let $pattern =
-                        unsafe { $crate::CssAtMediaQueryConsequent::new_unchecked(node) };
-                    $body
-                }
-                $crate::CssSyntaxKind::CSS_AT_MEDIA_QUERY_FEATURE => {
-                    let $pattern = unsafe { $crate::CssAtMediaQueryFeature::new_unchecked(node) };
-                    $body
-                }
-                $crate::CssSyntaxKind::CSS_AT_MEDIA_QUERY_FEATURE_BOOLEAN => {
-                    let $pattern =
-                        unsafe { $crate::CssAtMediaQueryFeatureBoolean::new_unchecked(node) };
-                    $body
-                }
-                $crate::CssSyntaxKind::CSS_AT_MEDIA_QUERY_FEATURE_COMPARE => {
-                    let $pattern =
-                        unsafe { $crate::CssAtMediaQueryFeatureCompare::new_unchecked(node) };
-                    $body
-                }
-                $crate::CssSyntaxKind::CSS_AT_MEDIA_QUERY_FEATURE_PLAIN => {
-                    let $pattern =
-                        unsafe { $crate::CssAtMediaQueryFeaturePlain::new_unchecked(node) };
-                    $body
-                }
-                $crate::CssSyntaxKind::CSS_AT_MEDIA_QUERY_FEATURE_RANGE => {
-                    let $pattern =
-                        unsafe { $crate::CssAtMediaQueryFeatureRange::new_unchecked(node) };
-                    $body
-                }
-                $crate::CssSyntaxKind::CSS_AT_MEDIA_QUERY_RANGE => {
-                    let $pattern = unsafe { $crate::CssAtMediaQueryRange::new_unchecked(node) };
+                $crate::CssSyntaxKind::CSS_AT_RULE => {
+                    let $pattern = unsafe { $crate::CssAtRule::new_unchecked(node) };
                     $body
                 }
                 $crate::CssSyntaxKind::CSS_ATTRIBUTE_MATCHER => {
@@ -77,16 +32,44 @@ macro_rules! map_syntax_node {
                     let $pattern = unsafe { $crate::CssAttributeMatcherValue::new_unchecked(node) };
                     $body
                 }
+                $crate::CssSyntaxKind::CSS_ATTRIBUTE_NAME => {
+                    let $pattern = unsafe { $crate::CssAttributeName::new_unchecked(node) };
+                    $body
+                }
                 $crate::CssSyntaxKind::CSS_ATTRIBUTE_SELECTOR => {
                     let $pattern = unsafe { $crate::CssAttributeSelector::new_unchecked(node) };
                     $body
                 }
-                $crate::CssSyntaxKind::CSS_BLOCK => {
-                    let $pattern = unsafe { $crate::CssBlock::new_unchecked(node) };
+                $crate::CssSyntaxKind::CSS_AUTO => {
+                    let $pattern = unsafe { $crate::CssAuto::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_BINARY_EXPRESSION => {
+                    let $pattern = unsafe { $crate::CssBinaryExpression::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_BORDER => {
+                    let $pattern = unsafe { $crate::CssBorder::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_BORDER_PROPERTY => {
+                    let $pattern = unsafe { $crate::CssBorderProperty::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_CHARSET_AT_RULE => {
+                    let $pattern = unsafe { $crate::CssCharsetAtRule::new_unchecked(node) };
                     $body
                 }
                 $crate::CssSyntaxKind::CSS_CLASS_SELECTOR => {
                     let $pattern = unsafe { $crate::CssClassSelector::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_COLOR => {
+                    let $pattern = unsafe { $crate::CssColor::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_COLOR_PROFILE_AT_RULE => {
+                    let $pattern = unsafe { $crate::CssColorProfileAtRule::new_unchecked(node) };
                     $body
                 }
                 $crate::CssSyntaxKind::CSS_COMPLEX_SELECTOR => {
@@ -97,8 +80,66 @@ macro_rules! map_syntax_node {
                     let $pattern = unsafe { $crate::CssCompoundSelector::new_unchecked(node) };
                     $body
                 }
-                $crate::CssSyntaxKind::CSS_CUSTOM_PROPERTY => {
-                    let $pattern = unsafe { $crate::CssCustomProperty::new_unchecked(node) };
+                $crate::CssSyntaxKind::CSS_CONTAINER_AND_QUERY => {
+                    let $pattern = unsafe { $crate::CssContainerAndQuery::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_CONTAINER_AT_RULE => {
+                    let $pattern = unsafe { $crate::CssContainerAtRule::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_CONTAINER_NOT_QUERY => {
+                    let $pattern = unsafe { $crate::CssContainerNotQuery::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_CONTAINER_OR_QUERY => {
+                    let $pattern = unsafe { $crate::CssContainerOrQuery::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_CONTAINER_QUERY_IN_PARENS => {
+                    let $pattern =
+                        unsafe { $crate::CssContainerQueryInParens::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_CONTAINER_SIZE_FEATURE_IN_PARENS => {
+                    let $pattern =
+                        unsafe { $crate::CssContainerSizeFeatureInParens::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_CONTAINER_STYLE_AND_QUERY => {
+                    let $pattern =
+                        unsafe { $crate::CssContainerStyleAndQuery::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_CONTAINER_STYLE_IN_PARENS => {
+                    let $pattern =
+                        unsafe { $crate::CssContainerStyleInParens::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_CONTAINER_STYLE_NOT_QUERY => {
+                    let $pattern =
+                        unsafe { $crate::CssContainerStyleNotQuery::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_CONTAINER_STYLE_OR_QUERY => {
+                    let $pattern = unsafe { $crate::CssContainerStyleOrQuery::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_CONTAINER_STYLE_QUERY_IN_PARENS => {
+                    let $pattern =
+                        unsafe { $crate::CssContainerStyleQueryInParens::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_COUNTER_STYLE_AT_RULE => {
+                    let $pattern = unsafe { $crate::CssCounterStyleAtRule::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_CUSTOM_IDENTIFIER => {
+                    let $pattern = unsafe { $crate::CssCustomIdentifier::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_DASHED_IDENTIFIER => {
+                    let $pattern = unsafe { $crate::CssDashedIdentifier::new_unchecked(node) };
                     $body
                 }
                 $crate::CssSyntaxKind::CSS_DECLARATION => {
@@ -109,8 +150,66 @@ macro_rules! map_syntax_node {
                     let $pattern = unsafe { $crate::CssDeclarationImportant::new_unchecked(node) };
                     $body
                 }
-                $crate::CssSyntaxKind::CSS_DIMENSION => {
-                    let $pattern = unsafe { $crate::CssDimension::new_unchecked(node) };
+                $crate::CssSyntaxKind::CSS_DECLARATION_LIST_BLOCK => {
+                    let $pattern = unsafe { $crate::CssDeclarationListBlock::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_DECLARATION_OR_AT_RULE_BLOCK => {
+                    let $pattern =
+                        unsafe { $crate::CssDeclarationOrAtRuleBlock::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_DECLARATION_OR_RULE_BLOCK => {
+                    let $pattern =
+                        unsafe { $crate::CssDeclarationOrRuleBlock::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_DECLARATION_WITH_SEMICOLON => {
+                    let $pattern =
+                        unsafe { $crate::CssDeclarationWithSemicolon::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_DOCUMENT_AT_RULE => {
+                    let $pattern = unsafe { $crate::CssDocumentAtRule::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_DOCUMENT_CUSTOM_MATCHER => {
+                    let $pattern = unsafe { $crate::CssDocumentCustomMatcher::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_FONT_FACE_AT_RULE => {
+                    let $pattern = unsafe { $crate::CssFontFaceAtRule::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_FONT_FEATURE_VALUES_AT_RULE => {
+                    let $pattern =
+                        unsafe { $crate::CssFontFeatureValuesAtRule::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_FONT_FEATURE_VALUES_BLOCK => {
+                    let $pattern =
+                        unsafe { $crate::CssFontFeatureValuesBlock::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_FONT_FEATURE_VALUES_ITEM => {
+                    let $pattern = unsafe { $crate::CssFontFeatureValuesItem::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_FONT_PALETTE_VALUES_AT_RULE => {
+                    let $pattern =
+                        unsafe { $crate::CssFontPaletteValuesAtRule::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_FUNCTION => {
+                    let $pattern = unsafe { $crate::CssFunction::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_GENERIC_DELIMITER => {
+                    let $pattern = unsafe { $crate::CssGenericDelimiter::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_GENERIC_PROPERTY => {
+                    let $pattern = unsafe { $crate::CssGenericProperty::new_unchecked(node) };
                     $body
                 }
                 $crate::CssSyntaxKind::CSS_ID_SELECTOR => {
@@ -121,42 +220,249 @@ macro_rules! map_syntax_node {
                     let $pattern = unsafe { $crate::CssIdentifier::new_unchecked(node) };
                     $body
                 }
+                $crate::CssSyntaxKind::CSS_IMPORT_ANONYMOUS_LAYER => {
+                    let $pattern = unsafe { $crate::CssImportAnonymousLayer::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_IMPORT_AT_RULE => {
+                    let $pattern = unsafe { $crate::CssImportAtRule::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_IMPORT_NAMED_LAYER => {
+                    let $pattern = unsafe { $crate::CssImportNamedLayer::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_IMPORT_SUPPORTS => {
+                    let $pattern = unsafe { $crate::CssImportSupports::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_KEYFRAMES_AT_RULE => {
+                    let $pattern = unsafe { $crate::CssKeyframesAtRule::new_unchecked(node) };
+                    $body
+                }
                 $crate::CssSyntaxKind::CSS_KEYFRAMES_BLOCK => {
                     let $pattern = unsafe { $crate::CssKeyframesBlock::new_unchecked(node) };
                     $body
                 }
-                $crate::CssSyntaxKind::CSS_KEYFRAMES_SELECTOR => {
-                    let $pattern = unsafe { $crate::CssKeyframesSelector::new_unchecked(node) };
+                $crate::CssSyntaxKind::CSS_KEYFRAMES_IDENT_SELECTOR => {
+                    let $pattern =
+                        unsafe { $crate::CssKeyframesIdentSelector::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_KEYFRAMES_ITEM => {
+                    let $pattern = unsafe { $crate::CssKeyframesItem::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_KEYFRAMES_PERCENTAGE_SELECTOR => {
+                    let $pattern =
+                        unsafe { $crate::CssKeyframesPercentageSelector::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_LAYER_AT_RULE => {
+                    let $pattern = unsafe { $crate::CssLayerAtRule::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_LAYER_DECLARATION => {
+                    let $pattern = unsafe { $crate::CssLayerDeclaration::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_LAYER_REFERENCE => {
+                    let $pattern = unsafe { $crate::CssLayerReference::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_LINE_STYLE => {
+                    let $pattern = unsafe { $crate::CssLineStyle::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_LINE_WIDTH_KEYWORD => {
+                    let $pattern = unsafe { $crate::CssLineWidthKeyword::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_LIST_OF_COMPONENT_VALUES_EXPRESSION => {
+                    let $pattern =
+                        unsafe { $crate::CssListOfComponentValuesExpression::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_MARGIN_AT_RULE => {
+                    let $pattern = unsafe { $crate::CssMarginAtRule::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_MEDIA_AND_CONDITION => {
+                    let $pattern = unsafe { $crate::CssMediaAndCondition::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_MEDIA_AND_TYPE_QUERY => {
+                    let $pattern = unsafe { $crate::CssMediaAndTypeQuery::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_MEDIA_AT_RULE => {
+                    let $pattern = unsafe { $crate::CssMediaAtRule::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_MEDIA_CONDITION_IN_PARENS => {
+                    let $pattern =
+                        unsafe { $crate::CssMediaConditionInParens::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_MEDIA_CONDITION_QUERY => {
+                    let $pattern = unsafe { $crate::CssMediaConditionQuery::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_MEDIA_FEATURE_IN_PARENS => {
+                    let $pattern = unsafe { $crate::CssMediaFeatureInParens::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_MEDIA_NOT_CONDITION => {
+                    let $pattern = unsafe { $crate::CssMediaNotCondition::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_MEDIA_OR_CONDITION => {
+                    let $pattern = unsafe { $crate::CssMediaOrCondition::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_MEDIA_TYPE => {
+                    let $pattern = unsafe { $crate::CssMediaType::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_MEDIA_TYPE_QUERY => {
+                    let $pattern = unsafe { $crate::CssMediaTypeQuery::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_NAMED_NAMESPACE_PREFIX => {
+                    let $pattern = unsafe { $crate::CssNamedNamespacePrefix::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_NAMESPACE => {
+                    let $pattern = unsafe { $crate::CssNamespace::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_NAMESPACE_AT_RULE => {
+                    let $pattern = unsafe { $crate::CssNamespaceAtRule::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_NESTED_QUALIFIED_RULE => {
+                    let $pattern = unsafe { $crate::CssNestedQualifiedRule::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_NTH_OFFSET => {
+                    let $pattern = unsafe { $crate::CssNthOffset::new_unchecked(node) };
                     $body
                 }
                 $crate::CssSyntaxKind::CSS_NUMBER => {
                     let $pattern = unsafe { $crate::CssNumber::new_unchecked(node) };
                     $body
                 }
+                $crate::CssSyntaxKind::CSS_PAGE_AT_RULE => {
+                    let $pattern = unsafe { $crate::CssPageAtRule::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_PAGE_AT_RULE_BLOCK => {
+                    let $pattern = unsafe { $crate::CssPageAtRuleBlock::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_PAGE_SELECTOR => {
+                    let $pattern = unsafe { $crate::CssPageSelector::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_PAGE_SELECTOR_PSEUDO => {
+                    let $pattern = unsafe { $crate::CssPageSelectorPseudo::new_unchecked(node) };
+                    $body
+                }
                 $crate::CssSyntaxKind::CSS_PARAMETER => {
                     let $pattern = unsafe { $crate::CssParameter::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_PARENTHESIZED_EXPRESSION => {
+                    let $pattern =
+                        unsafe { $crate::CssParenthesizedExpression::new_unchecked(node) };
                     $body
                 }
                 $crate::CssSyntaxKind::CSS_PERCENTAGE => {
                     let $pattern = unsafe { $crate::CssPercentage::new_unchecked(node) };
                     $body
                 }
+                $crate::CssSyntaxKind::CSS_PSEUDO_CLASS_FUNCTION_COMPOUND_SELECTOR => {
+                    let $pattern = unsafe {
+                        $crate::CssPseudoClassFunctionCompoundSelector::new_unchecked(node)
+                    };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_PSEUDO_CLASS_FUNCTION_COMPOUND_SELECTOR_LIST => {
+                    let $pattern = unsafe {
+                        $crate::CssPseudoClassFunctionCompoundSelectorList::new_unchecked(node)
+                    };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_PSEUDO_CLASS_FUNCTION_IDENTIFIER => {
+                    let $pattern =
+                        unsafe { $crate::CssPseudoClassFunctionIdentifier::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_PSEUDO_CLASS_FUNCTION_NTH => {
+                    let $pattern =
+                        unsafe { $crate::CssPseudoClassFunctionNth::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_PSEUDO_CLASS_FUNCTION_RELATIVE_SELECTOR_LIST => {
+                    let $pattern = unsafe {
+                        $crate::CssPseudoClassFunctionRelativeSelectorList::new_unchecked(node)
+                    };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_PSEUDO_CLASS_FUNCTION_SELECTOR => {
+                    let $pattern =
+                        unsafe { $crate::CssPseudoClassFunctionSelector::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_PSEUDO_CLASS_FUNCTION_SELECTOR_LIST => {
+                    let $pattern =
+                        unsafe { $crate::CssPseudoClassFunctionSelectorList::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_PSEUDO_CLASS_FUNCTION_VALUE_LIST => {
+                    let $pattern =
+                        unsafe { $crate::CssPseudoClassFunctionValueList::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_PSEUDO_CLASS_IDENTIFIER => {
+                    let $pattern = unsafe { $crate::CssPseudoClassIdentifier::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_PSEUDO_CLASS_NTH => {
+                    let $pattern = unsafe { $crate::CssPseudoClassNth::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_PSEUDO_CLASS_NTH_IDENTIFIER => {
+                    let $pattern =
+                        unsafe { $crate::CssPseudoClassNthIdentifier::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_PSEUDO_CLASS_NTH_NUMBER => {
+                    let $pattern = unsafe { $crate::CssPseudoClassNthNumber::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_PSEUDO_CLASS_NTH_SELECTOR => {
+                    let $pattern =
+                        unsafe { $crate::CssPseudoClassNthSelector::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_PSEUDO_CLASS_OF_NTH_SELECTOR => {
+                    let $pattern =
+                        unsafe { $crate::CssPseudoClassOfNthSelector::new_unchecked(node) };
+                    $body
+                }
                 $crate::CssSyntaxKind::CSS_PSEUDO_CLASS_SELECTOR => {
                     let $pattern = unsafe { $crate::CssPseudoClassSelector::new_unchecked(node) };
                     $body
                 }
-                $crate::CssSyntaxKind::CSS_PSEUDO_CLASS_SELECTOR_PARAMETERS => {
+                $crate::CssSyntaxKind::CSS_PSEUDO_ELEMENT_FUNCTION_IDENTIFIER => {
                     let $pattern =
-                        unsafe { $crate::CssPseudoClassSelectorParameters::new_unchecked(node) };
+                        unsafe { $crate::CssPseudoElementFunctionIdentifier::new_unchecked(node) };
                     $body
                 }
-                $crate::CssSyntaxKind::CSS_PSEUDO_ELEMENT_FUNCTION => {
-                    let $pattern = unsafe { $crate::CssPseudoElementFunction::new_unchecked(node) };
-                    $body
-                }
-                $crate::CssSyntaxKind::CSS_PSEUDO_ELEMENT_HIGHLIGHT => {
+                $crate::CssSyntaxKind::CSS_PSEUDO_ELEMENT_FUNCTION_SELECTOR => {
                     let $pattern =
-                        unsafe { $crate::CssPseudoElementHighlight::new_unchecked(node) };
+                        unsafe { $crate::CssPseudoElementFunctionSelector::new_unchecked(node) };
                     $body
                 }
                 $crate::CssSyntaxKind::CSS_PSEUDO_ELEMENT_IDENTIFIER => {
@@ -168,52 +474,221 @@ macro_rules! map_syntax_node {
                     let $pattern = unsafe { $crate::CssPseudoElementSelector::new_unchecked(node) };
                     $body
                 }
+                $crate::CssSyntaxKind::CSS_QUALIFIED_RULE => {
+                    let $pattern = unsafe { $crate::CssQualifiedRule::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_QUERY_FEATURE_BOOLEAN => {
+                    let $pattern = unsafe { $crate::CssQueryFeatureBoolean::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_QUERY_FEATURE_PLAIN => {
+                    let $pattern = unsafe { $crate::CssQueryFeaturePlain::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_QUERY_FEATURE_RANGE => {
+                    let $pattern = unsafe { $crate::CssQueryFeatureRange::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_QUERY_FEATURE_RANGE_COMPARISON => {
+                    let $pattern =
+                        unsafe { $crate::CssQueryFeatureRangeComparison::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_QUERY_FEATURE_RANGE_INTERVAL => {
+                    let $pattern =
+                        unsafe { $crate::CssQueryFeatureRangeInterval::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_QUERY_FEATURE_REVERSE_RANGE => {
+                    let $pattern =
+                        unsafe { $crate::CssQueryFeatureReverseRange::new_unchecked(node) };
+                    $body
+                }
                 $crate::CssSyntaxKind::CSS_RATIO => {
                     let $pattern = unsafe { $crate::CssRatio::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_REGULAR_DIMENSION => {
+                    let $pattern = unsafe { $crate::CssRegularDimension::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_RELATIVE_SELECTOR => {
+                    let $pattern = unsafe { $crate::CssRelativeSelector::new_unchecked(node) };
                     $body
                 }
                 $crate::CssSyntaxKind::CSS_ROOT => {
                     let $pattern = unsafe { $crate::CssRoot::new_unchecked(node) };
                     $body
                 }
-                $crate::CssSyntaxKind::CSS_RULE => {
-                    let $pattern = unsafe { $crate::CssRule::new_unchecked(node) };
+                $crate::CssSyntaxKind::CSS_RULE_LIST_BLOCK => {
+                    let $pattern = unsafe { $crate::CssRuleListBlock::new_unchecked(node) };
                     $body
                 }
-                $crate::CssSyntaxKind::CSS_SIMPLE_FUNCTION => {
-                    let $pattern = unsafe { $crate::CssSimpleFunction::new_unchecked(node) };
+                $crate::CssSyntaxKind::CSS_SCOPE_AT_RULE => {
+                    let $pattern = unsafe { $crate::CssScopeAtRule::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_SCOPE_EDGE => {
+                    let $pattern = unsafe { $crate::CssScopeEdge::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_SCOPE_RANGE_END => {
+                    let $pattern = unsafe { $crate::CssScopeRangeEnd::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_SCOPE_RANGE_INTERVAL => {
+                    let $pattern = unsafe { $crate::CssScopeRangeInterval::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_SCOPE_RANGE_START => {
+                    let $pattern = unsafe { $crate::CssScopeRangeStart::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_STARTING_STYLE_AT_RULE => {
+                    let $pattern = unsafe { $crate::CssStartingStyleAtRule::new_unchecked(node) };
                     $body
                 }
                 $crate::CssSyntaxKind::CSS_STRING => {
                     let $pattern = unsafe { $crate::CssString::new_unchecked(node) };
                     $body
                 }
+                $crate::CssSyntaxKind::CSS_SUPPORTS_AND_CONDITION => {
+                    let $pattern = unsafe { $crate::CssSupportsAndCondition::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_SUPPORTS_AT_RULE => {
+                    let $pattern = unsafe { $crate::CssSupportsAtRule::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_SUPPORTS_CONDITION_IN_PARENS => {
+                    let $pattern =
+                        unsafe { $crate::CssSupportsConditionInParens::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_SUPPORTS_FEATURE_DECLARATION => {
+                    let $pattern =
+                        unsafe { $crate::CssSupportsFeatureDeclaration::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_SUPPORTS_FEATURE_SELECTOR => {
+                    let $pattern =
+                        unsafe { $crate::CssSupportsFeatureSelector::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_SUPPORTS_NOT_CONDITION => {
+                    let $pattern = unsafe { $crate::CssSupportsNotCondition::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_SUPPORTS_OR_CONDITION => {
+                    let $pattern = unsafe { $crate::CssSupportsOrCondition::new_unchecked(node) };
+                    $body
+                }
                 $crate::CssSyntaxKind::CSS_TYPE_SELECTOR => {
                     let $pattern = unsafe { $crate::CssTypeSelector::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_UNIVERSAL_NAMESPACE_PREFIX => {
+                    let $pattern =
+                        unsafe { $crate::CssUniversalNamespacePrefix::new_unchecked(node) };
                     $body
                 }
                 $crate::CssSyntaxKind::CSS_UNIVERSAL_SELECTOR => {
                     let $pattern = unsafe { $crate::CssUniversalSelector::new_unchecked(node) };
                     $body
                 }
-                $crate::CssSyntaxKind::CSS_VAR_FUNCTION => {
-                    let $pattern = unsafe { $crate::CssVarFunction::new_unchecked(node) };
+                $crate::CssSyntaxKind::CSS_UNKNOWN_DIMENSION => {
+                    let $pattern = unsafe { $crate::CssUnknownDimension::new_unchecked(node) };
                     $body
                 }
-                $crate::CssSyntaxKind::CSS_VAR_FUNCTION_VALUE => {
-                    let $pattern = unsafe { $crate::CssVarFunctionValue::new_unchecked(node) };
+                $crate::CssSyntaxKind::CSS_UNKNOWN_PROPERTY_VALUE => {
+                    let $pattern = unsafe { $crate::CssUnknownPropertyValue::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_URL_FUNCTION => {
+                    let $pattern = unsafe { $crate::CssUrlFunction::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_URL_VALUE_RAW => {
+                    let $pattern = unsafe { $crate::CssUrlValueRaw::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_WIDE_KEYWORD => {
+                    let $pattern = unsafe { $crate::CssWideKeyword::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_Z_INDEX_PROPERTY => {
+                    let $pattern = unsafe { $crate::CssZIndexProperty::new_unchecked(node) };
                     $body
                 }
                 $crate::CssSyntaxKind::CSS_BOGUS => {
                     let $pattern = unsafe { $crate::CssBogus::new_unchecked(node) };
                     $body
                 }
-                $crate::CssSyntaxKind::CSS_BOGUS_BODY => {
-                    let $pattern = unsafe { $crate::CssBogusBody::new_unchecked(node) };
+                $crate::CssSyntaxKind::CSS_BOGUS_AT_RULE => {
+                    let $pattern = unsafe { $crate::CssBogusAtRule::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_BOGUS_BLOCK => {
+                    let $pattern = unsafe { $crate::CssBogusBlock::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_BOGUS_DECLARATION_ITEM => {
+                    let $pattern = unsafe { $crate::CssBogusDeclarationItem::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_BOGUS_DOCUMENT_MATCHER => {
+                    let $pattern = unsafe { $crate::CssBogusDocumentMatcher::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_BOGUS_FONT_FEATURE_VALUES_ITEM => {
+                    let $pattern =
+                        unsafe { $crate::CssBogusFontFeatureValuesItem::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_BOGUS_KEYFRAMES_ITEM => {
+                    let $pattern = unsafe { $crate::CssBogusKeyframesItem::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_BOGUS_LAYER => {
+                    let $pattern = unsafe { $crate::CssBogusLayer::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_BOGUS_MEDIA_QUERY => {
+                    let $pattern = unsafe { $crate::CssBogusMediaQuery::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_BOGUS_PAGE_SELECTOR_PSEUDO => {
+                    let $pattern =
+                        unsafe { $crate::CssBogusPageSelectorPseudo::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_BOGUS_PARAMETER => {
+                    let $pattern = unsafe { $crate::CssBogusParameter::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_BOGUS_PROPERTY => {
+                    let $pattern = unsafe { $crate::CssBogusProperty::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_BOGUS_PROPERTY_VALUE => {
+                    let $pattern = unsafe { $crate::CssBogusPropertyValue::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_BOGUS_PSEUDO_CLASS => {
+                    let $pattern = unsafe { $crate::CssBogusPseudoClass::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_BOGUS_PSEUDO_ELEMENT => {
+                    let $pattern = unsafe { $crate::CssBogusPseudoElement::new_unchecked(node) };
                     $body
                 }
                 $crate::CssSyntaxKind::CSS_BOGUS_RULE => {
                     let $pattern = unsafe { $crate::CssBogusRule::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_BOGUS_SCOPE_RANGE => {
+                    let $pattern = unsafe { $crate::CssBogusScopeRange::new_unchecked(node) };
                     $body
                 }
                 $crate::CssSyntaxKind::CSS_BOGUS_SELECTOR => {
@@ -224,24 +699,88 @@ macro_rules! map_syntax_node {
                     let $pattern = unsafe { $crate::CssBogusSubSelector::new_unchecked(node) };
                     $body
                 }
-                $crate::CssSyntaxKind::CSS_AT_KEYFRAMES_ITEM_LIST => {
-                    let $pattern = unsafe { $crate::CssAtKeyframesItemList::new_unchecked(node) };
+                $crate::CssSyntaxKind::CSS_BOGUS_URL_MODIFIER => {
+                    let $pattern = unsafe { $crate::CssBogusUrlModifier::new_unchecked(node) };
                     $body
                 }
-                $crate::CssSyntaxKind::CSS_AT_MEDIA_QUERY_LIST => {
-                    let $pattern = unsafe { $crate::CssAtMediaQueryList::new_unchecked(node) };
+                $crate::CssSyntaxKind::CSS_COMPONENT_VALUE_LIST => {
+                    let $pattern = unsafe { $crate::CssComponentValueList::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_COMPOUND_SELECTOR_LIST => {
+                    let $pattern = unsafe { $crate::CssCompoundSelectorList::new_unchecked(node) };
                     $body
                 }
                 $crate::CssSyntaxKind::CSS_DECLARATION_LIST => {
                     let $pattern = unsafe { $crate::CssDeclarationList::new_unchecked(node) };
                     $body
                 }
+                $crate::CssSyntaxKind::CSS_DECLARATION_OR_AT_RULE_LIST => {
+                    let $pattern =
+                        unsafe { $crate::CssDeclarationOrAtRuleList::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_DECLARATION_OR_RULE_LIST => {
+                    let $pattern = unsafe { $crate::CssDeclarationOrRuleList::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_DOCUMENT_MATCHER_LIST => {
+                    let $pattern = unsafe { $crate::CssDocumentMatcherList::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_FONT_FEATURE_VALUES_ITEM_LIST => {
+                    let $pattern =
+                        unsafe { $crate::CssFontFeatureValuesItemList::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_GENERIC_COMPONENT_VALUE_LIST => {
+                    let $pattern =
+                        unsafe { $crate::CssGenericComponentValueList::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_KEYFRAMES_ITEM_LIST => {
+                    let $pattern = unsafe { $crate::CssKeyframesItemList::new_unchecked(node) };
+                    $body
+                }
                 $crate::CssSyntaxKind::CSS_KEYFRAMES_SELECTOR_LIST => {
                     let $pattern = unsafe { $crate::CssKeyframesSelectorList::new_unchecked(node) };
                     $body
                 }
+                $crate::CssSyntaxKind::CSS_LAYER_NAME_LIST => {
+                    let $pattern = unsafe { $crate::CssLayerNameList::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_LAYER_REFERENCE_LIST => {
+                    let $pattern = unsafe { $crate::CssLayerReferenceList::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_MEDIA_QUERY_LIST => {
+                    let $pattern = unsafe { $crate::CssMediaQueryList::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_PAGE_AT_RULE_ITEM_LIST => {
+                    let $pattern = unsafe { $crate::CssPageAtRuleItemList::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_PAGE_SELECTOR_LIST => {
+                    let $pattern = unsafe { $crate::CssPageSelectorList::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_PAGE_SELECTOR_PSEUDO_LIST => {
+                    let $pattern =
+                        unsafe { $crate::CssPageSelectorPseudoList::new_unchecked(node) };
+                    $body
+                }
                 $crate::CssSyntaxKind::CSS_PARAMETER_LIST => {
                     let $pattern = unsafe { $crate::CssParameterList::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_PSEUDO_VALUE_LIST => {
+                    let $pattern = unsafe { $crate::CssPseudoValueList::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_RELATIVE_SELECTOR_LIST => {
+                    let $pattern = unsafe { $crate::CssRelativeSelectorList::new_unchecked(node) };
                     $body
                 }
                 $crate::CssSyntaxKind::CSS_RULE_LIST => {
@@ -254,6 +793,10 @@ macro_rules! map_syntax_node {
                 }
                 $crate::CssSyntaxKind::CSS_SUB_SELECTOR_LIST => {
                     let $pattern = unsafe { $crate::CssSubSelectorList::new_unchecked(node) };
+                    $body
+                }
+                $crate::CssSyntaxKind::CSS_URL_MODIFIER_LIST => {
+                    let $pattern = unsafe { $crate::CssUrlModifierList::new_unchecked(node) };
                     $body
                 }
                 _ => unreachable!(),

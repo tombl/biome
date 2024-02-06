@@ -2,7 +2,7 @@ use crate::prelude::*;
 use biome_json_syntax::JsonSyntaxKind;
 use biome_json_syntax::JsonSyntaxKind::*;
 use biome_parser::diagnostic::{expected_any, expected_node};
-use biome_parser::parse_recovery::ParseRecovery;
+use biome_parser::parse_recovery::ParseRecoveryTokenSet;
 use biome_parser::parsed_syntax::ParsedSyntax::Absent;
 use biome_parser::prelude::ParsedSyntax::Present;
 use biome_parser::ParserProgress;
@@ -23,12 +23,13 @@ const VALUE_RECOVERY_SET: TokenSet<JsonSyntaxKind> =
 
 pub(crate) fn parse_root(p: &mut JsonParser) {
     let m = p.start();
+    p.eat(UNICODE_BOM);
 
     let value = match parse_value(p) {
         Present(value) => Present(value),
         Absent => {
             p.error(expected_value(p, p.cur_range()));
-            match ParseRecovery::new(JSON_BOGUS_VALUE, VALUE_START).recover(p) {
+            match ParseRecoveryTokenSet::new(JSON_BOGUS_VALUE, VALUE_START).recover(p) {
                 Ok(value) => Present(value),
                 Err(_) => Absent,
             }
@@ -188,7 +189,7 @@ fn parse_sequence(p: &mut JsonParser, root_kind: SequenceKind) -> ParsedSyntax {
                     let range = if p.at(T![,]) {
                         p.cur_range()
                     } else {
-                        match ParseRecovery::new(JSON_BOGUS_VALUE, current.recovery_set())
+                        match ParseRecoveryTokenSet::new(JSON_BOGUS_VALUE, current.recovery_set())
                             .enable_recovery_on_line_break()
                             .recover(p)
                         {
@@ -316,7 +317,7 @@ fn parse_rest(p: &mut JsonParser, value: ParsedSyntax) {
     while !p.at(EOF) {
         let range = match parse_value(p) {
             Present(value) => value.range(p),
-            Absent => ParseRecovery::new(JSON_BOGUS_VALUE, VALUE_START)
+            Absent => ParseRecoveryTokenSet::new(JSON_BOGUS_VALUE, VALUE_START)
                 .recover(p)
                 .expect("Expect recovery to succeed because parser isn't at EOF nor at a value.")
                 .range(p),
@@ -324,7 +325,7 @@ fn parse_rest(p: &mut JsonParser, value: ParsedSyntax) {
 
         p.error(
             p.err_builder("End of file expected", range)
-                .hint("Use an array for a sequence of values: `[1, 2]`"),
+                .with_hint("Use an array for a sequence of values: `[1, 2]`"),
         );
     }
 
@@ -334,9 +335,9 @@ fn parse_rest(p: &mut JsonParser, value: ParsedSyntax) {
 }
 
 fn expected_value(p: &JsonParser, range: TextRange) -> ParseDiagnostic {
-    expected_any(&["array", "object", "literal"], range).into_diagnostic(p)
+    expected_any(&["array", "object", "literal"], range, p)
 }
 
 fn expected_property(p: &JsonParser, range: TextRange) -> ParseDiagnostic {
-    expected_node("property", range).into_diagnostic(p)
+    expected_node("property", range, p)
 }

@@ -1,6 +1,7 @@
 use crate::JsRuleAction;
 use biome_analyze::{
     context::RuleContext, declare_rule, ActionCategory, Ast, FixKind, Rule, RuleDiagnostic,
+    RuleSource,
 };
 use biome_console::markup;
 use biome_diagnostics::Applicability;
@@ -13,8 +14,8 @@ use biome_js_syntax::{
     AnyJsMemberExpression, AnyJsName, AnyJsObjectMemberName, JsComputedMemberName,
     JsLiteralMemberName, JsSyntaxKind, T,
 };
-use biome_js_unicode_table::is_js_ident;
 use biome_rowan::{declare_node_union, AstNode, BatchMutationExt, TextRange};
+use biome_unicode_table::is_js_ident;
 
 declare_rule! {
     /// Enforce the usage of a literal access to properties over computed property access.
@@ -41,7 +42,7 @@ declare_rule! {
     /// }
     /// ```
     ///
-    /// ## Valid
+    /// ### Valid
     ///
     /// ```js
     /// a["c" + "d"];
@@ -51,6 +52,7 @@ declare_rule! {
     pub(crate) UseLiteralKeys {
         version: "1.0.0",
         name: "useLiteralKeys",
+        source: RuleSource::Eslint("dot-notation"),
         recommended: true,
         fix_kind: FixKind::Unsafe,
     }

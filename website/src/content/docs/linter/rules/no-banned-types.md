@@ -8,6 +8,8 @@ title: noBannedTypes (since v1.0.0)
 This rule is recommended by Biome. A diagnostic error will appear when linting your code.
 :::
 
+Source: <a href="https://typescript-eslint.io/rules/ban-types" target="_blank"><code>ban-types</code></a>
+
 Disallow primitive type aliases and misleading types.
 
 - Enforce consistent names for primitive types
@@ -47,8 +49,9 @@ const n: {} = 0
 
 To represent an empty object, you should use `{ [k: string]: never }` or `Record<string, never>`.
 
-To avoid any confusion, the rule forbids the use of the type `{}`,e except in two situation.
-In type constraints to restrict a generic type to non-nullable types:
+To avoid any confusion, the rule forbids the use of the type `{}`, except in two situations:
+
+1. In type constraints to restrict a generic type to non-nullable types:
 
 ```ts
 function f<T extends {}>(x: T) {
@@ -56,7 +59,7 @@ function f<T extends {}>(x: T) {
 }
 ```
 
-And in a type intersection to narrow a type to its non-nullable equivalent type:
+2. In a type intersection to narrow a type to its non-nullable equivalent type:
 
 ```ts
 type NonNullableMyType = MyType & {};
@@ -69,8 +72,6 @@ type NonNullableMyType = NonNullable<MyType>;
 ```
 
 
-
-Source: https://typescript-eslint.io/rules/ban-types
 
 ## Examples
 
@@ -150,9 +151,6 @@ let foo: string = "bar";
 
 ```ts
 let tuple: [boolean, string] = [false, "foo"];
-```
-
-```
 ```
 
 ## Related links

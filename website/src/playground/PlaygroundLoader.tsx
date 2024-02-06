@@ -8,16 +8,17 @@ import {
 import Playground from "./Playground";
 import LoadingScreen from "./components/LoadingScreen";
 import {
-	ArrowParentheses,
-	IndentStyle,
-	LintRules,
+	type ArrowParentheses,
+	type AttributePosition,
+	type IndentStyle,
+	type LintRules,
 	LoadingState,
 	type PlaygroundSettings,
 	type PlaygroundState,
-	QuoteProperties,
-	QuoteStyle,
-	Semicolons,
-	TrailingComma,
+	type QuoteProperties,
+	type QuoteStyle,
+	type Semicolons,
+	type TrailingComma,
 	defaultPlaygroundState,
 	emptyBiomeOutput,
 	emptyPrettierOutput,
@@ -306,7 +307,7 @@ function initState(
 		currentFile: Object.keys(files)[0] ?? "main.js",
 		files,
 		settings: {
-			lineWidth: parseInt(
+			lineWidth: Number.parseInt(
 				searchParams.get("lineWidth") ??
 					String(defaultPlaygroundState.settings.lineWidth),
 			),
@@ -325,7 +326,7 @@ function initState(
 			trailingComma:
 				(searchParams.get("trailingComma") as TrailingComma) ??
 				defaultPlaygroundState.settings.trailingComma,
-			indentWidth: parseInt(
+			indentWidth: Number.parseInt(
 				searchParams.get("indentWidth") ??
 					String(defaultPlaygroundState.settings.indentWidth),
 			),
@@ -335,6 +336,15 @@ function initState(
 			arrowParentheses:
 				(searchParams.get("arrowParentheses") as ArrowParentheses) ??
 				defaultPlaygroundState.settings.arrowParentheses,
+			attributePosition:
+				(searchParams.get("attributePosition") as AttributePosition) ??
+				defaultPlaygroundState.settings.attributePosition,
+			bracketSpacing:
+				searchParams.get("bracketSpacing") === "true" ||
+				defaultPlaygroundState.settings.bracketSpacing,
+			bracketSameLine:
+				searchParams.get("bracketSameLine") === "true" ??
+				defaultPlaygroundState.settings.bracketSameLine,
 			lintRules:
 				(searchParams.get("lintRules") as LintRules) ??
 				defaultPlaygroundState.settings.lintRules,

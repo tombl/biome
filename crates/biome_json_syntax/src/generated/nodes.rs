@@ -12,13 +12,18 @@ use crate::{
 use biome_rowan::{support, AstNode, RawSyntaxKind, SyntaxKindSet, SyntaxResult};
 #[allow(unused)]
 use biome_rowan::{
-    AstNodeList, AstNodeListIterator, AstSeparatedList, AstSeparatedListNodesIterator,
+    AstNodeList, AstNodeListIterator, AstNodeSlotMap, AstSeparatedList,
+    AstSeparatedListNodesIterator,
 };
 #[cfg(feature = "serde")]
 use serde::ser::SerializeSeq;
 #[cfg(feature = "serde")]
 use serde::{Serialize, Serializer};
 use std::fmt::{Debug, Formatter};
+#[doc = r" Sentinel value indicating a missing element in a dynamic node, where"]
+#[doc = r" the slots are not statically known."]
+#[allow(dead_code)]
+pub(crate) const SLOT_MAP_EMPTY_VALUE: u8 = u8::MAX;
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct JsonArrayValue {
     pub(crate) syntax: SyntaxNode,
@@ -317,15 +322,19 @@ impl JsonRoot {
     }
     pub fn as_fields(&self) -> JsonRootFields {
         JsonRootFields {
+            bom_token: self.bom_token(),
             value: self.value(),
             eof_token: self.eof_token(),
         }
     }
+    pub fn bom_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, 0usize)
+    }
     pub fn value(&self) -> SyntaxResult<AnyJsonValue> {
-        support::required_node(&self.syntax, 0usize)
+        support::required_node(&self.syntax, 1usize)
     }
     pub fn eof_token(&self) -> SyntaxResult<SyntaxToken> {
-        support::required_token(&self.syntax, 1usize)
+        support::required_token(&self.syntax, 2usize)
     }
 }
 #[cfg(feature = "serde")]
@@ -339,6 +348,7 @@ impl Serialize for JsonRoot {
 }
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct JsonRootFields {
+    pub bom_token: Option<SyntaxToken>,
     pub value: SyntaxResult<AnyJsonValue>,
     pub eof_token: SyntaxResult<SyntaxToken>,
 }
@@ -756,6 +766,10 @@ impl AstNode for JsonRoot {
 impl std::fmt::Debug for JsonRoot {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("JsonRoot")
+            .field(
+                "bom_token",
+                &support::DebugOptionalElement(self.bom_token()),
+            )
             .field("value", &support::DebugSyntaxResult(self.value()))
             .field("eof_token", &support::DebugSyntaxResult(self.eof_token()))
             .finish()

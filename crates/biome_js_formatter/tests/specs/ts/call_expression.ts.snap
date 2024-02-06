@@ -30,6 +30,16 @@ export class Task {
         this.args = args;
     }
 }
+
+// Issue https://github.com/biomejs/biome/issues/1171
+users.map((user: User): User => {
+  ; // comment
+})
+
+users.map((user: User): User => {
+  // comment
+})
+
 ```
 
 
@@ -42,6 +52,7 @@ export class Task {
 -----
 Indent style: Tab
 Indent width: 2
+Line ending: LF
 Line width: 80
 Quote style: Double Quotes
 JSX quote style: Double Quotes
@@ -49,6 +60,9 @@ Quote properties: As needed
 Trailing comma: All
 Semicolons: Always
 Arrow parentheses: Always
+Bracket spacing: true
+Bracket same line: false
+Attribute Position: Auto
 -----
 
 ```ts
@@ -75,6 +89,15 @@ export class Task {
 		this.args = args;
 	}
 }
+
+// Issue https://github.com/biomejs/biome/issues/1171
+users.map((user: User): User => {
+	// comment
+});
+
+users.map((user: User): User => {
+	// comment
+});
 ```
 
 

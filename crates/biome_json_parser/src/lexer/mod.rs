@@ -3,11 +3,12 @@
 #[rustfmt::skip]
 mod tests;
 
-use biome_js_unicode_table::{is_id_continue, is_id_start, lookup_byte, Dispatch::*};
 use biome_json_syntax::{JsonSyntaxKind, JsonSyntaxKind::*, TextLen, TextRange, TextSize, T};
 use biome_parser::diagnostic::ParseDiagnostic;
+use biome_unicode_table::{is_js_id_continue, is_js_id_start, lookup_byte, Dispatch::*};
 use std::iter::FusedIterator;
 use std::ops::Add;
+use unicode_bom::Bom;
 
 use crate::JsonParserOptions;
 
@@ -147,7 +148,7 @@ impl<'src> Lexer<'src> {
                                 "The JSON standard only allows tabs, whitespace, carriage return and line feed whitespace.",
                                 start..self.text_position(),
                             )
-                            .hint("Use a regular whitespace character instead."),
+                            .with_hint("Use a regular whitespace character instead."),
                         )
                     }
                 },
@@ -167,6 +168,36 @@ impl<'src> Lexer<'src> {
         } else {
             self.consume_whitespaces();
             WHITESPACE
+        }
+    }
+
+    /// Check if the source starts with a Unicode BOM character. If it does,
+    /// consume it and return the UNICODE_BOM token kind.
+    ///
+    /// Note that JSON explicitly forbids BOM characters from appearing in a
+    /// network-transmitted JSON Text: https://datatracker.ietf.org/doc/html/rfc8259#section-8.1.
+    /// However, Windows editors in particular will occasionally add a BOM
+    /// anyway, and Biome should not remove those characters when present, so
+    /// they need to be tracked.
+    ///
+    /// ## Safety
+    /// Must be called at a valid UT8 char boundary (and realistically only at
+    /// the start position of the source).
+    fn consume_potential_bom(&mut self) -> Option<JsonSyntaxKind> {
+        // Bom needs at least the first three bytes of the source to know if it
+        // matches the UTF-8 BOM and not an alternative. This can be expanded
+        // to more bytes to support other BOM characters if Biome decides to
+        // support other encodings like UTF-16.
+        if let Some(first) = self.source().get(0..3) {
+            let bom = Bom::from(first.as_bytes());
+            self.advance(bom.len());
+
+            match bom {
+                Bom::Null => None,
+                _ => Some(UNICODE_BOM),
+            }
+        } else {
+            None
         }
     }
 
@@ -290,8 +321,12 @@ impl<'src> Lexer<'src> {
             UNI => {
                 let chr = self.current_char_unchecked();
 
-                if is_id_start(chr) {
+                if is_js_id_start(chr) {
                     self.lex_identifier(current)
+                } else if self.position == 0 && self.consume_potential_bom().is_some() {
+                    // A BOM can only appear at the start of a file, so if we haven't advanced at all yet,
+                    // perform the check. At any other position, the BOM is just considered plain whitespace.
+                    UNICODE_BOM
                 } else {
                     self.eat_unexpected_character()
                 }
@@ -443,11 +478,11 @@ impl<'src> Lexer<'src> {
                     ),
                     InvalidNumberReason::MissingExponent => {
                         ParseDiagnostic::new( "Missing exponent", start..position)
-                            .detail(position..position + TextSize::from(1), "Expected a digit as the exponent")
+                            .with_detail(position..position + TextSize::from(1), "Expected a digit as the exponent")
                     }
                     InvalidNumberReason::MissingFraction => {
                         ParseDiagnostic::new( "Missing fraction", position..position + TextSize::from(1))
-                            .hint("Remove the `.`")
+                            .with_hint("Remove the `.`")
                     }
                 };
 
@@ -514,7 +549,7 @@ impl<'src> Lexer<'src> {
                                         "Invalid escape sequence",
                                         escape_start..self.text_position() + c.text_len(),
                                     )
-                                        .hint(r#"Valid escape sequences are: `\\`, `\/`, `/"`, `\b\`, `\f`, `\n`, `\r`, `\t` or any unicode escape sequence `\uXXXX` where X is hexedecimal number. "#),
+                                        .with_hint(r#"Valid escape sequences are: `\\`, `\/`, `/"`, `\b\`, `\f`, `\n`, `\r`, `\t` or any unicode escape sequence `\uXXXX` where X is hexedecimal number. "#),
                                 );
                                 state = LexStringState::InvalidEscapeSequence;
                             }
@@ -527,7 +562,7 @@ impl<'src> Lexer<'src> {
                                     "Expected an escape sequence following a backslash, but found none",
                                     escape_start..self.text_position(),
                                 )
-                                    .detail(self.text_position()..self.text_position(), "File ends here")
+                                    .with_detail(self.text_position()..self.text_position(), "File ends here")
                                 );
                                 state = LexStringState::InvalidEscapeSequence;
                             }
@@ -537,7 +572,7 @@ impl<'src> Lexer<'src> {
                 WHS if matches!(chr, b'\n' | b'\r') => {
                     let unterminated =
                         ParseDiagnostic::new("Missing closing quote", start..self.text_position())
-                            .detail(self.position..self.position + 1, "line breaks here");
+                            .with_detail(self.position..self.position + 1, "line breaks here");
 
                     self.diagnostics.push(unterminated);
 
@@ -560,7 +595,7 @@ impl<'src> Lexer<'src> {
                             ),
                             self.text_position()..self.text_position() + TextSize::from(1),
                         )
-                        .hint(format!("Use the escape sequence '\\u{chr:04x}' instead.")),
+                        .with_hint(format!("Use the escape sequence '\\u{chr:04x}' instead.")),
                     );
                     state = LexStringState::InvalidEscapeSequence;
                 }
@@ -577,14 +612,14 @@ impl<'src> Lexer<'src> {
                         "JSON standard does not allow single quoted strings",
                         literal_range,
                     )
-                    .hint("Use double quotes to escape the string."),
+                    .with_hint("Use double quotes to escape the string."),
                 );
                 ERROR_TOKEN
             }
             LexStringState::InString => {
                 let unterminated =
                     ParseDiagnostic::new("Missing closing quote", start..self.text_position())
-                        .detail(
+                        .with_detail(
                             self.source.text_len()..self.source.text_len(),
                             "file ends here",
                         );
@@ -623,8 +658,8 @@ impl<'src> Lexer<'src> {
                         "Invalid unicode sequence",
                         start..self.text_position(),
                     )
-                    .detail(self.text_position()..self.text_position().add(char.text_len()), "Non hexadecimal number")
-                    .hint("A unicode escape sequence must consist of 4 hexadecimal numbers: `\\uXXXX`, e.g. `\\u002F' for '/'."));
+                    .with_detail(self.text_position()..self.text_position().add(char.text_len()), "Non hexadecimal number")
+                    .with_hint("A unicode escape sequence must consist of 4 hexadecimal numbers: `\\uXXXX`, e.g. `\\u002F' for '/'."));
                 }
                 None => {
                     // Reached the end of the file before processing 4 hex digits
@@ -633,11 +668,11 @@ impl<'src> Lexer<'src> {
                         "Unicode escape sequence with two few hexadecimal numbers.",
                         start..self.text_position(),
                     )
-                    .detail(
+                    .with_detail(
                         self.text_position()..self.text_position(),
                         "reached the end of the file",
                     )
-                    .hint("A unicode escape sequence must consist of 4 hexadecimal numbers: `\\uXXXX`, e.g. `\\u002F' for '/'."));
+                    .with_hint("A unicode escape sequence must consist of 4 hexadecimal numbers: `\\uXXXX`, e.g. `\\u002F' for '/'."));
                 }
             }
         }
@@ -664,7 +699,7 @@ impl<'src> Lexer<'src> {
                 UNI => {
                     let char = self.current_char_unchecked();
                     keyword = KeywordMatcher::None;
-                    if is_id_continue(char) {
+                    if is_js_id_continue(char) {
                         self.advance(char.len_utf8());
                     } else {
                         break;
@@ -722,7 +757,7 @@ impl<'src> Lexer<'src> {
 
                 let err =
                     ParseDiagnostic::new("Unterminated block comment", start..self.text_position())
-                        .detail(
+                        .with_detail(
                             self.position..self.position + 1,
                             "... but the file ends here",
                         );

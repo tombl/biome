@@ -1,5 +1,5 @@
 use crate::ControlFlowGraph;
-use biome_analyze::{context::RuleContext, declare_rule, Rule, RuleDiagnostic};
+use biome_analyze::{context::RuleContext, declare_rule, Rule, RuleDiagnostic, RuleSource};
 use biome_console::markup;
 use biome_control_flow::{builder::ROOT_BLOCK_ID, ExceptionHandlerKind, InstructionKind};
 use biome_js_syntax::{JsGetterClassMember, JsGetterObjectMember, JsReturnStatement};
@@ -8,8 +8,6 @@ use roaring::RoaringBitmap;
 
 declare_rule! {
     /// Enforce `get` methods to always return a value.
-    ///
-    /// Source: https://eslint.org/docs/latest/rules/getter-return
     ///
     /// ## Examples
     ///
@@ -25,7 +23,7 @@ declare_rule! {
     /// const obj = {
     ///     get firstName() {
     ///         return;
-    ///     },
+    ///     }
     /// }
     /// ```
     ///
@@ -37,11 +35,11 @@ declare_rule! {
     ///         } else {
     ///             return null;
     ///         }
-    ///     },
+    ///     }
     /// }
     /// ```
     ///
-    /// ## Valid
+    /// ### Valid
     ///
     /// ```js
     /// class Person {
@@ -55,13 +53,14 @@ declare_rule! {
     /// const obj = {
     ///     get firstName() {
     ///         return this.fullname.split(" ")[0];
-    ///     },
+    ///     }
     /// }
     /// ```
     ///
     pub(crate) UseGetterReturn {
         version: "1.0.0",
         name: "useGetterReturn",
+        source: RuleSource::Eslint("getter-return"),
         recommended: true,
     }
 }
@@ -150,7 +149,7 @@ impl Rule for UseGetterReturn {
                 rule_category!(),
                 return_stmt_range,
                 markup! {
-                    "This "<Emphasis>"return"</Emphasis>" should return a value because it is located in a "<Emphasis>"return"</Emphasis>"."
+                    "This "<Emphasis>"return"</Emphasis>" should return a value because it is located in a "<Emphasis>"getter"</Emphasis>"."
                 },
             ),
         };

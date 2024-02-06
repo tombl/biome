@@ -4,7 +4,7 @@ use biome_analyze::{merge_node_visitors, Visitor, VisitorContext};
 use biome_js_syntax::{
     AnyJsFunction, JsConstructorClassMember, JsGetterClassMember, JsGetterObjectMember, JsLanguage,
     JsMethodClassMember, JsMethodObjectMember, JsModule, JsScript, JsSetterClassMember,
-    JsSetterObjectMember, JsStaticInitializationBlockClassMember,
+    JsSetterObjectMember, JsStaticInitializationBlockClassMember, TsModuleDeclaration,
 };
 use biome_rowan::{declare_node_union, AstNode, SyntaxError, SyntaxResult};
 
@@ -169,6 +169,7 @@ declare_node_union! {
         | JsGetterClassMember
         | JsSetterClassMember
         | JsStaticInitializationBlockClassMember
+        | TsModuleDeclaration
 }
 
 impl biome_analyze::NodeVisitor<ControlFlowVisitor> for FunctionVisitor {

@@ -2,19 +2,21 @@
 #![allow(unused_mut, unused_variables, unused_assignments)]
 
 use super::{CssLexer, TextSize};
+use crate::lexer::CssLexContext;
+use crate::CssParserOptions;
+use biome_css_syntax::CssSyntaxKind::EOF;
+use biome_parser::lexer::Lexer;
 use quickcheck_macros::quickcheck;
 use std::sync::mpsc::channel;
 use std::thread;
 use std::time::Duration;
-use biome_css_syntax::CssSyntaxKind::EOF;
-use biome_parser::lexer::Lexer;
-use crate::lexer::CssLexContext;
 
 // Assert the result of lexing a piece of source code,
 // and make sure the tokens yielded are fully lossless and the source can be reconstructed from only the tokens
 macro_rules! assert_lex {
     ($src:expr, $($kind:ident:$len:expr $(,)?)*) => {{
-        let mut lexer = CssLexer::from_str($src);
+        let config = CssParserOptions::default().allow_wrong_line_comments();
+        let mut lexer = CssLexer::from_str($src).with_config(config);
         let mut idx = 0;
         let mut tok_idx = TextSize::default();
 
@@ -254,21 +256,58 @@ fn number() {
 }
 
 #[test]
+fn dimension() {
+    assert_lex! {
+        "5098382s",
+        CSS_DIMENSION_VALUE:7,
+        S_KW:1
+    }
+    assert_lex! {
+        "10.0px",
+        CSS_DIMENSION_VALUE:4,
+        PX_KW:2
+    }
+    assert_lex! {
+        "10.0e+7fr",
+        CSS_DIMENSION_VALUE:7,
+        FR_KW:2
+    }
+    assert_lex! {
+        "0\\0",
+        CSS_DIMENSION_VALUE:1,
+        IDENT:2
+    }
+
+    // A space breaks the dimension token and leaves it as a number literal
+    assert_lex! {
+        "1 px",
+        CSS_NUMBER_LITERAL:1,
+        WHITESPACE:1,
+        PX_KW:2
+    }
+
+    // Percentages aren't technically dimensions, but we treat them similarly.
+    assert_lex! {
+        "100%",
+        CSS_PERCENTAGE_VALUE:3,
+        PERCENT:1
+    }
+
+    assert_lex! {
+        "100 %",
+        CSS_NUMBER_LITERAL:3,
+        WHITESPACE:1
+        PERCENT:1
+    }
+}
+
+#[test]
 fn cdo_and_cdc() {
     assert_lex! {
         "<!-- -->",
         CDO:4,
         WHITESPACE:1,
         CDC:3
-    }
-}
-
-#[test]
-fn dimension() {
-    assert_lex! {
-        "100vh",
-        CSS_NUMBER_LITERAL:3,
-        IDENT:2
     }
 }
 
@@ -283,6 +322,14 @@ fn keywords() {
         IMPORTANT_KW:9,
         WHITESPACE:1,
         FROM_KW:4
+    }
+}
+
+#[test]
+fn attribute() {
+    assert_lex! {
+        "$=",
+        DOLLAR_EQ:2
     }
 }
 
@@ -346,7 +393,7 @@ fn identifier() {
 }
 
 #[test]
-fn single_line_comments() {
+fn wrong_line_comments() {
     assert_lex! {
         "//abc
     ",
@@ -377,5 +424,21 @@ fn block_comment() {
     assert_lex! {
         "/* *",
         COMMENT:4
+    }
+}
+
+#[test]
+fn char() {
+    assert_lex! {
+        "!",
+        BANG:1
+    }
+    assert_lex! {
+        "%",
+        PERCENT:1
+    }
+    assert_lex! {
+        "/",
+        SLASH:1
     }
 }

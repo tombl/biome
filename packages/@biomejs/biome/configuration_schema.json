@@ -8,6 +8,13 @@
 			"description": "A field for the [JSON schema](https://json-schema.org/) specification",
 			"type": ["string", "null"]
 		},
+		"css": {
+			"description": "Specific configuration for the Css language",
+			"anyOf": [
+				{ "$ref": "#/definitions/CssConfiguration" },
+				{ "type": "null" }
+			]
+		},
 		"extends": {
 			"description": "A list of paths to other JSON files, used to extends the current configuration.",
 			"anyOf": [{ "$ref": "#/definitions/StringSet" }, { "type": "null" }]
@@ -80,6 +87,13 @@
 						{ "type": "null" }
 					]
 				},
+				"noAriaHiddenOnFocusable": {
+					"description": "Enforce that aria-hidden=\"true\" is not set on focusable elements.",
+					"anyOf": [
+						{ "$ref": "#/definitions/RuleConfiguration" },
+						{ "type": "null" }
+					]
+				},
 				"noAriaUnsupportedElements": {
 					"description": "Enforce that elements that do not support ARIA roles, states, and properties do not have those attributes.",
 					"anyOf": [
@@ -110,6 +124,13 @@
 				},
 				"noHeaderScope": {
 					"description": "The scope prop should be used only on <th> elements.",
+					"anyOf": [
+						{ "$ref": "#/definitions/RuleConfiguration" },
+						{ "type": "null" }
+					]
+				},
+				"noInteractiveElementToNoninteractiveRole": {
+					"description": "Enforce that non-interactive ARIA roles are not assigned to interactive HTML elements.",
 					"anyOf": [
 						{ "$ref": "#/definitions/RuleConfiguration" },
 						{ "type": "null" }
@@ -170,6 +191,13 @@
 				},
 				"useAnchorContent": {
 					"description": "Enforce that anchors have content and that the content is accessible to screen readers.",
+					"anyOf": [
+						{ "$ref": "#/definitions/RuleConfiguration" },
+						{ "type": "null" }
+					]
+				},
+				"useAriaActivedescendantWithTabindex": {
+					"description": "Enforce that tabIndex is assigned to non-interactive HTML elements with aria-activedescendant.",
 					"anyOf": [
 						{ "$ref": "#/definitions/RuleConfiguration" },
 						{ "type": "null" }
@@ -245,6 +273,13 @@
 						{ "type": "null" }
 					]
 				},
+				"useValidAriaRole": {
+					"description": "Elements with ARIA roles must use a valid, non-abstract ARIA role.",
+					"anyOf": [
+						{ "$ref": "#/definitions/RuleConfiguration" },
+						{ "type": "null" }
+					]
+				},
 				"useValidAriaValues": {
 					"description": "Enforce that ARIA state and property values are valid.",
 					"anyOf": [
@@ -262,6 +297,7 @@
 			}
 		},
 		"ArrowParentheses": { "type": "string", "enum": ["always", "asNeeded"] },
+		"AttributePosition": { "type": "string", "enum": ["auto", "multiline"] },
 		"Complexity": {
 			"description": "A list of rules that belong to this group",
 			"type": "object",
@@ -307,6 +343,13 @@
 				},
 				"noStaticOnlyClass": {
 					"description": "This rule reports when a class has no non-static members, such as for a class used exclusively as a static namespace.",
+					"anyOf": [
+						{ "$ref": "#/definitions/RuleConfiguration" },
+						{ "type": "null" }
+					]
+				},
+				"noThisInStatic": {
+					"description": "Disallow this and super in static contexts.",
 					"anyOf": [
 						{ "$ref": "#/definitions/RuleConfiguration" },
 						{ "type": "null" }
@@ -393,6 +436,13 @@
 					"description": "It enables the recommended rules for this group",
 					"type": ["boolean", "null"]
 				},
+				"useArrowFunction": {
+					"description": "Use arrow functions over function expressions.",
+					"anyOf": [
+						{ "$ref": "#/definitions/RuleConfiguration" },
+						{ "type": "null" }
+					]
+				},
 				"useFlatMap": {
 					"description": "Promotes the use of .flatMap() when map().flat() are used together.",
 					"anyOf": [
@@ -409,6 +459,13 @@
 				},
 				"useOptionalChain": {
 					"description": "Enforce using concise optional chain instead of chained logical expressions.",
+					"anyOf": [
+						{ "$ref": "#/definitions/RuleConfiguration" },
+						{ "type": "null" }
+					]
+				},
+				"useRegexLiterals": {
+					"description": "Enforce the use of the regular expression literals instead of the RegExp constructor if possible.",
 					"anyOf": [
 						{ "$ref": "#/definitions/RuleConfiguration" },
 						{ "type": "null" }
@@ -439,8 +496,30 @@
 					"description": "The maximum complexity score that we allow. Anything higher is considered excessive.",
 					"type": "integer",
 					"format": "uint8",
-					"minimum": 0.0
+					"minimum": 1.0
 				}
+			},
+			"additionalProperties": false
+		},
+		"ConsistentArrayType": {
+			"oneOf": [
+				{
+					"description": "`ItemType[]`",
+					"type": "string",
+					"enum": ["shorthand"]
+				},
+				{
+					"description": "`Array<ItemType>`",
+					"type": "string",
+					"enum": ["generic"]
+				}
+			]
+		},
+		"ConsistentArrayTypeOptions": {
+			"type": "object",
+			"required": ["syntax"],
+			"properties": {
+				"syntax": { "$ref": "#/definitions/ConsistentArrayType" }
 			},
 			"additionalProperties": false
 		},
@@ -480,6 +559,13 @@
 						{ "type": "null" }
 					]
 				},
+				"noEmptyCharacterClassInRegex": {
+					"description": "Disallow empty character classes in regular expression literals.",
+					"anyOf": [
+						{ "$ref": "#/definitions/RuleConfiguration" },
+						{ "type": "null" }
+					]
+				},
 				"noEmptyPattern": {
 					"description": "Disallows empty destructuring patterns.",
 					"anyOf": [
@@ -503,6 +589,13 @@
 				},
 				"noInvalidConstructorSuper": {
 					"description": "Prevents the incorrect use of super() inside classes. It also checks whether a call super() is missing from classes that extends other constructors.",
+					"anyOf": [
+						{ "$ref": "#/definitions/RuleConfiguration" },
+						{ "type": "null" }
+					]
+				},
+				"noInvalidNewBuiltin": {
+					"description": "Disallow new operators with global non-constructor functions.",
 					"anyOf": [
 						{ "$ref": "#/definitions/RuleConfiguration" },
 						{ "type": "null" }
@@ -675,6 +768,80 @@
 				}
 			}
 		},
+		"CssConfiguration": {
+			"description": "Options applied to CSS files",
+			"type": "object",
+			"properties": {
+				"formatter": {
+					"description": "Formatting options",
+					"anyOf": [
+						{ "$ref": "#/definitions/CssFormatter" },
+						{ "type": "null" }
+					]
+				},
+				"parser": {
+					"description": "Parsing options",
+					"anyOf": [{ "$ref": "#/definitions/CssParser" }, { "type": "null" }]
+				}
+			},
+			"additionalProperties": false
+		},
+		"CssFormatter": {
+			"type": "object",
+			"properties": {
+				"enabled": {
+					"description": "Control the formatter for CSS (and its super languages) files.",
+					"type": ["boolean", "null"]
+				},
+				"indentSize": {
+					"description": "The size of the indentation applied to CSS (and its super languages) files. Default to 2.",
+					"type": ["integer", "null"],
+					"format": "uint8",
+					"minimum": 0.0
+				},
+				"indentStyle": {
+					"description": "The indent style applied to CSS (and its super languages) files.",
+					"anyOf": [
+						{ "$ref": "#/definitions/PlainIndentStyle" },
+						{ "type": "null" }
+					]
+				},
+				"indentWidth": {
+					"description": "The size of the indentation applied to CSS (and its super languages) files. Default to 2.",
+					"type": ["integer", "null"],
+					"format": "uint8",
+					"minimum": 0.0
+				},
+				"lineEnding": {
+					"description": "The type of line ending applied to CSS (and its super languages) files.",
+					"anyOf": [{ "$ref": "#/definitions/LineEnding" }, { "type": "null" }]
+				},
+				"lineWidth": {
+					"description": "What's the max width of a line applied to CSS (and its super languages) files. Defaults to 80.",
+					"anyOf": [{ "$ref": "#/definitions/LineWidth" }, { "type": "null" }]
+				},
+				"quoteStyle": {
+					"anyOf": [{ "$ref": "#/definitions/QuoteStyle" }, { "type": "null" }]
+				}
+			},
+			"additionalProperties": false
+		},
+		"CssParser": {
+			"description": "Options that changes how the CSS parser behaves",
+			"type": "object",
+			"properties": {
+				"allowWrongLineComments": {
+					"description": "Allow comments to appear on incorrect lines in `.css` files",
+					"type": ["boolean", "null"]
+				}
+			},
+			"additionalProperties": false
+		},
+		"DeprecatedHooksOptions": {
+			"description": "Options for the `useHookAtTopLevel` rule have been deprecated, since we now use the React hook naming convention to determine whether a function is a hook.",
+			"type": "object",
+			"additionalProperties": false
+		},
 		"EnumMemberCase": {
 			"description": "Supported cases for TypeScript `enum` member names.",
 			"oneOf": [
@@ -690,6 +857,52 @@
 				},
 				{ "description": "camelCase", "type": "string", "enum": ["camelCase"] }
 			]
+		},
+		"FilenameCase": {
+			"description": "Supported cases for TypeScript `enum` member names.",
+			"oneOf": [
+				{ "description": "camelCase", "type": "string", "enum": ["camelCase"] },
+				{
+					"description": "Match an export name",
+					"type": "string",
+					"enum": ["export"]
+				},
+				{
+					"description": "kebab-case",
+					"type": "string",
+					"enum": ["kebab-case"]
+				},
+				{
+					"description": "PascalCase",
+					"type": "string",
+					"enum": ["PascalCase"]
+				},
+				{
+					"description": "snake_case",
+					"type": "string",
+					"enum": ["snake_case"]
+				}
+			]
+		},
+		"FilenameCases": {
+			"type": "array",
+			"items": { "$ref": "#/definitions/FilenameCase" },
+			"uniqueItems": true
+		},
+		"FilenamingConventionOptions": {
+			"description": "Rule's options.",
+			"type": "object",
+			"properties": {
+				"filenameCases": {
+					"description": "Allowed cases for _TypeScript_ `enum` member names.",
+					"allOf": [{ "$ref": "#/definitions/FilenameCases" }]
+				},
+				"strictCase": {
+					"description": "If `false`, then consecutive uppercase are allowed in _camel_ and _pascal_ cases. This does not affect other [Case].",
+					"type": "boolean"
+				}
+			},
+			"additionalProperties": false
 		},
 		"FilesConfiguration": {
 			"description": "The configuration of the filesystem",
@@ -709,7 +922,6 @@
 				},
 				"maxSize": {
 					"description": "The maximum allowed size for source code files in bytes. Files above this limit will be ignored for performance reasons. Defaults to 1 MiB",
-					"default": null,
 					"type": ["integer", "null"],
 					"format": "uint64",
 					"minimum": 1.0
@@ -721,10 +933,16 @@
 			"description": "Generic options applied to all files",
 			"type": "object",
 			"properties": {
-				"enabled": { "default": true, "type": ["boolean", "null"] },
+				"attributePosition": {
+					"description": "The attribute position style. By default auto.",
+					"anyOf": [
+						{ "$ref": "#/definitions/AttributePosition" },
+						{ "type": "null" }
+					]
+				},
+				"enabled": { "type": ["boolean", "null"] },
 				"formatWithErrors": {
 					"description": "Stores whether formatting should be allowed to proceed if a given file has syntax errors",
-					"default": false,
 					"type": ["boolean", "null"]
 				},
 				"ignore": {
@@ -737,14 +955,12 @@
 				},
 				"indentSize": {
 					"description": "The size of the indentation, 2 by default (deprecated, use `indent-width`)",
-					"default": 2,
 					"type": ["integer", "null"],
 					"format": "uint8",
 					"minimum": 0.0
 				},
 				"indentStyle": {
 					"description": "The indent style.",
-					"default": "tab",
 					"anyOf": [
 						{ "$ref": "#/definitions/PlainIndentStyle" },
 						{ "type": "null" }
@@ -752,14 +968,16 @@
 				},
 				"indentWidth": {
 					"description": "The size of the indentation, 2 by default",
-					"default": 2,
 					"type": ["integer", "null"],
 					"format": "uint8",
 					"minimum": 0.0
 				},
+				"lineEnding": {
+					"description": "The type of line ending.",
+					"anyOf": [{ "$ref": "#/definitions/LineEnding" }, { "type": "null" }]
+				},
 				"lineWidth": {
 					"description": "What's the max width of a line. Defaults to 80.",
-					"default": 80,
 					"anyOf": [{ "$ref": "#/definitions/LineWidth" }, { "type": "null" }]
 				}
 			},
@@ -786,7 +1004,7 @@
 			"additionalProperties": false
 		},
 		"HooksOptions": {
-			"description": "Options for the rule `useExhaustiveDependencies` and `useHookAtTopLevel`",
+			"description": "Options for the rule `useExhaustiveDependencies`",
 			"type": "object",
 			"required": ["hooks"],
 			"properties": {
@@ -840,6 +1058,21 @@
 						{ "type": "null" }
 					]
 				},
+				"attributePosition": {
+					"description": "The attribute position style in JavaScript code. Defaults to auto.",
+					"anyOf": [
+						{ "$ref": "#/definitions/AttributePosition" },
+						{ "type": "null" }
+					]
+				},
+				"bracketSameLine": {
+					"description": "Whether to hug the closing bracket of multiline HTML/JSX tags to the end of the last line, rather than being alone on the following line. Defaults to false.",
+					"type": ["boolean", "null"]
+				},
+				"bracketSpacing": {
+					"description": "Whether to insert spaces around brackets in object literals. Defaults to true.",
+					"type": ["boolean", "null"]
+				},
 				"enabled": {
 					"description": "Control the formatter for JavaScript (and its super languages) files.",
 					"type": ["boolean", "null"]
@@ -867,8 +1100,12 @@
 					"description": "The type of quotes used in JSX. Defaults to double.",
 					"anyOf": [{ "$ref": "#/definitions/QuoteStyle" }, { "type": "null" }]
 				},
+				"lineEnding": {
+					"description": "The type of line ending applied to JavaScript (and its super languages) files.",
+					"anyOf": [{ "$ref": "#/definitions/LineEnding" }, { "type": "null" }]
+				},
 				"lineWidth": {
-					"description": "What's the max width of a line, applied to JavaScript (and its super languages) files. Defaults to 80.",
+					"description": "What's the max width of a line applied to JavaScript (and its super languages) files. Defaults to 80.",
 					"anyOf": [{ "$ref": "#/definitions/LineWidth" }, { "type": "null" }]
 				},
 				"quoteProperties": {
@@ -955,8 +1192,12 @@
 					"format": "uint8",
 					"minimum": 0.0
 				},
+				"lineEnding": {
+					"description": "The type of line ending applied to JSON (and its super languages) files.",
+					"anyOf": [{ "$ref": "#/definitions/LineEnding" }, { "type": "null" }]
+				},
 				"lineWidth": {
-					"description": "What's the max width of a line, applied to JSON (and its super languages) files. Defaults to 80.",
+					"description": "What's the max width of a line applied to JSON (and its super languages) files. Defaults to 80.",
 					"anyOf": [{ "$ref": "#/definitions/LineWidth" }, { "type": "null" }]
 				}
 			},
@@ -977,6 +1218,25 @@
 			},
 			"additionalProperties": false
 		},
+		"LineEnding": {
+			"oneOf": [
+				{
+					"description": "Line Feed only (\\n), common on Linux and macOS as well as inside git repos",
+					"type": "string",
+					"enum": ["lf"]
+				},
+				{
+					"description": "Carriage Return + Line Feed characters (\\r\\n), common on Windows",
+					"type": "string",
+					"enum": ["crlf"]
+				},
+				{
+					"description": "Carriage Return character only (\\r), used very rarely",
+					"type": "string",
+					"enum": ["cr"]
+				}
+			]
+		},
 		"LineWidth": {
 			"description": "Validated value for the `line_width` formatter options\n\nThe allowed range of values is 1..=320",
 			"type": "integer",
@@ -988,7 +1248,6 @@
 			"properties": {
 				"enabled": {
 					"description": "if `false`, it disables the feature and the linter won't be executed. `true` by default",
-					"default": true,
 					"type": ["boolean", "null"]
 				},
 				"ignore": {
@@ -1001,7 +1260,6 @@
 				},
 				"rules": {
 					"description": "List of rules",
-					"default": { "recommended": true },
 					"anyOf": [{ "$ref": "#/definitions/Rules" }, { "type": "null" }]
 				}
 			},
@@ -1030,13 +1288,6 @@
 					"description": "It enables ALL rules for this group.",
 					"type": ["boolean", "null"]
 				},
-				"noApproximativeNumericConstant": {
-					"description": "Usually, the definition in the standard library is more precise than what people come up with or the used constant exceeds the maximum precision of the number type.",
-					"anyOf": [
-						{ "$ref": "#/definitions/RuleConfiguration" },
-						{ "type": "null" }
-					]
-				},
 				"noDuplicateJsonKeys": {
 					"description": "Disallow two keys with the same name inside a JSON object.",
 					"anyOf": [
@@ -1051,36 +1302,71 @@
 						{ "type": "null" }
 					]
 				},
-				"noEmptyCharacterClassInRegex": {
-					"description": "Disallow empty character classes in regular expression literals.",
+				"noEmptyTypeParameters": {
+					"description": "Disallow empty type parameters in type aliases and interfaces.",
 					"anyOf": [
 						{ "$ref": "#/definitions/RuleConfiguration" },
 						{ "type": "null" }
 					]
 				},
-				"noInteractiveElementToNoninteractiveRole": {
-					"description": "Enforce that non-interactive ARIA roles are not assigned to interactive HTML elements.",
+				"noFocusedTests": {
+					"description": "Disallow focused tests.",
 					"anyOf": [
 						{ "$ref": "#/definitions/RuleConfiguration" },
 						{ "type": "null" }
 					]
 				},
-				"noInvalidNewBuiltin": {
-					"description": "Disallow new operators with global non-constructor functions.",
+				"noGlobalAssign": {
+					"description": "Disallow assignments to native objects and read-only global variables.",
 					"anyOf": [
 						{ "$ref": "#/definitions/RuleConfiguration" },
 						{ "type": "null" }
 					]
 				},
-				"noMisleadingInstantiator": {
-					"description": "Enforce proper usage of new and constructor.",
+				"noGlobalEval": {
+					"description": "Disallow the use of global eval().",
 					"anyOf": [
 						{ "$ref": "#/definitions/RuleConfiguration" },
 						{ "type": "null" }
 					]
 				},
-				"noMisrefactoredShorthandAssign": {
-					"description": "Disallow shorthand assign when variable appears on both sides.",
+				"noInvalidUseBeforeDeclaration": {
+					"description": "Disallow the use of variables and function parameters before their declaration",
+					"anyOf": [
+						{ "$ref": "#/definitions/RuleConfiguration" },
+						{ "type": "null" }
+					]
+				},
+				"noMisleadingCharacterClass": {
+					"description": "Disallow characters made with multiple code points in character class syntax.",
+					"anyOf": [
+						{ "$ref": "#/definitions/RuleConfiguration" },
+						{ "type": "null" }
+					]
+				},
+				"noNodejsModules": {
+					"description": "Forbid the use of Node.js builtin modules.",
+					"anyOf": [
+						{ "$ref": "#/definitions/RuleConfiguration" },
+						{ "type": "null" }
+					]
+				},
+				"noReExportAll": {
+					"description": "Avoid re-export all",
+					"anyOf": [
+						{ "$ref": "#/definitions/RuleConfiguration" },
+						{ "type": "null" }
+					]
+				},
+				"noSkippedTests": {
+					"description": "Disallow disabled tests.",
+					"anyOf": [
+						{ "$ref": "#/definitions/RuleConfiguration" },
+						{ "type": "null" }
+					]
+				},
+				"noThenProperty": {
+					"description": "Disallow then property.",
 					"anyOf": [
 						{ "$ref": "#/definitions/RuleConfiguration" },
 						{ "type": "null" }
@@ -1093,8 +1379,8 @@
 						{ "type": "null" }
 					]
 				},
-				"noUselessElse": {
-					"description": "Disallow else block when the if block breaks early.",
+				"noUnusedPrivateClassMembers": {
+					"description": "Disallow unused private class members",
 					"anyOf": [
 						{ "$ref": "#/definitions/RuleConfiguration" },
 						{ "type": "null" }
@@ -1107,26 +1393,47 @@
 						{ "type": "null" }
 					]
 				},
+				"noUselessTernary": {
+					"description": "Disallow ternary operators when simpler alternatives exist.",
+					"anyOf": [
+						{ "$ref": "#/definitions/RuleConfiguration" },
+						{ "type": "null" }
+					]
+				},
 				"recommended": {
 					"description": "It enables the recommended rules for this group",
 					"type": ["boolean", "null"]
 				},
-				"useAriaActivedescendantWithTabindex": {
-					"description": "Enforce that tabIndex is assigned to non-interactive HTML elements with aria-activedescendant.",
+				"useAwait": {
+					"description": "Ensure async functions utilize await.",
 					"anyOf": [
 						{ "$ref": "#/definitions/RuleConfiguration" },
 						{ "type": "null" }
 					]
 				},
-				"useArrowFunction": {
-					"description": "Use arrow functions over function expressions.",
+				"useConsistentArrayType": {
+					"description": "Require consistently using either T[] or Array<T>",
 					"anyOf": [
 						{ "$ref": "#/definitions/RuleConfiguration" },
 						{ "type": "null" }
 					]
 				},
-				"useAsConstAssertion": {
-					"description": "Enforce the use of as const over literal type and type annotation.",
+				"useExportType": {
+					"description": "Promotes the use of export type for types.",
+					"anyOf": [
+						{ "$ref": "#/definitions/RuleConfiguration" },
+						{ "type": "null" }
+					]
+				},
+				"useFilenamingConvention": {
+					"description": "Enforce naming conventions for JavaScript and TypeScript filenames.",
+					"anyOf": [
+						{ "$ref": "#/definitions/RuleConfiguration" },
+						{ "type": "null" }
+					]
+				},
+				"useForOf": {
+					"description": "This rule recommends a for-of loop when in a for loop, the index used to extract an item from the iterated array.",
 					"anyOf": [
 						{ "$ref": "#/definitions/RuleConfiguration" },
 						{ "type": "null" }
@@ -1146,8 +1453,36 @@
 						{ "type": "null" }
 					]
 				},
-				"useShorthandAssign": {
-					"description": "Require assignment operator shorthand where possible.",
+				"useImportType": {
+					"description": "Promotes the use of import type for types.",
+					"anyOf": [
+						{ "$ref": "#/definitions/RuleConfiguration" },
+						{ "type": "null" }
+					]
+				},
+				"useNodejsImportProtocol": {
+					"description": "Enforces using the node: protocol for Node.js builtin modules.",
+					"anyOf": [
+						{ "$ref": "#/definitions/RuleConfiguration" },
+						{ "type": "null" }
+					]
+				},
+				"useNumberNamespace": {
+					"description": "Use the Number properties instead of global ones.",
+					"anyOf": [
+						{ "$ref": "#/definitions/RuleConfiguration" },
+						{ "type": "null" }
+					]
+				},
+				"useShorthandFunctionType": {
+					"description": "Enforce using function types instead of object type with call signatures.",
+					"anyOf": [
+						{ "$ref": "#/definitions/RuleConfiguration" },
+						{ "type": "null" }
+					]
+				},
+				"useSortedClasses": {
+					"description": "Enforce the sorting of CSS utility classes.",
 					"anyOf": [
 						{ "$ref": "#/definitions/RuleConfiguration" },
 						{ "type": "null" }
@@ -1160,7 +1495,6 @@
 			"properties": {
 				"enabled": {
 					"description": "Enables the organization of imports",
-					"default": true,
 					"type": ["boolean", "null"]
 				},
 				"ignore": {
@@ -1177,6 +1511,14 @@
 		"OverrideFormatterConfiguration": {
 			"type": "object",
 			"properties": {
+				"attributePosition": {
+					"description": "The attribute position style.",
+					"default": null,
+					"anyOf": [
+						{ "$ref": "#/definitions/AttributePosition" },
+						{ "type": "null" }
+					]
+				},
 				"enabled": { "default": null, "type": ["boolean", "null"] },
 				"formatWithErrors": {
 					"description": "Stores whether formatting should be allowed to proceed if a given file has syntax errors",
@@ -1201,6 +1543,10 @@
 					"type": ["integer", "null"],
 					"format": "uint8",
 					"minimum": 0.0
+				},
+				"lineEnding": {
+					"description": "The type of line ending.",
+					"anyOf": [{ "$ref": "#/definitions/LineEnding" }, { "type": "null" }]
 				},
 				"lineWidth": {
 					"description": "What's the max width of a line. Defaults to 80.",
@@ -1237,6 +1583,13 @@
 		"OverridePattern": {
 			"type": "object",
 			"properties": {
+				"css": {
+					"description": "Specific configuration for the Css language",
+					"anyOf": [
+						{ "$ref": "#/definitions/CssConfiguration" },
+						{ "type": "null" }
+					]
+				},
 				"formatter": {
 					"description": "Specific configuration for the Json language",
 					"anyOf": [
@@ -1284,14 +1637,8 @@
 			"additionalProperties": false
 		},
 		"Overrides": {
-			"type": "object",
-			"properties": {
-				"list": {
-					"type": "array",
-					"items": { "$ref": "#/definitions/OverridePattern" }
-				}
-			},
-			"additionalProperties": false
+			"type": "array",
+			"items": { "$ref": "#/definitions/OverridePattern" }
 		},
 		"Performance": {
 			"description": "A list of rules that belong to this group",
@@ -1334,8 +1681,20 @@
 					"allOf": [{ "$ref": "#/definitions/ComplexityOptions" }]
 				},
 				{
-					"description": "Options for `useExhaustiveDependencies` and `useHookAtTopLevel` rule",
+					"description": "Options for `useConsistentArrayType` rule",
+					"allOf": [{ "$ref": "#/definitions/ConsistentArrayTypeOptions" }]
+				},
+				{
+					"description": "Options for `useFilenamingConvention` rule",
+					"allOf": [{ "$ref": "#/definitions/FilenamingConventionOptions" }]
+				},
+				{
+					"description": "Options for `useExhaustiveDependencies` rule",
 					"allOf": [{ "$ref": "#/definitions/HooksOptions" }]
+				},
+				{
+					"description": "Deprecated options for `useHookAtTopLevel` rule",
+					"allOf": [{ "$ref": "#/definitions/DeprecatedHooksOptions" }]
 				},
 				{
 					"description": "Options for `useNamingConvention` rule",
@@ -1345,7 +1704,14 @@
 					"description": "Options for `noRestrictedGlobals` rule",
 					"allOf": [{ "$ref": "#/definitions/RestrictedGlobalsOptions" }]
 				},
-				{ "description": "No options available", "type": "null" }
+				{
+					"description": "Options for `useValidAriaRole` rule",
+					"allOf": [{ "$ref": "#/definitions/ValidAriaRoleOptions" }]
+				},
+				{
+					"description": "Options for `useSortedClasses` rule",
+					"allOf": [{ "$ref": "#/definitions/UtilityClassSortingOptions" }]
+				}
 			]
 		},
 		"QuoteProperties": { "type": "string", "enum": ["asNeeded", "preserve"] },
@@ -1353,10 +1719,11 @@
 		"RestrictedGlobalsOptions": {
 			"description": "Options for the rule `noRestrictedGlobals`.",
 			"type": "object",
+			"required": ["deniedGlobals"],
 			"properties": {
 				"deniedGlobals": {
 					"description": "A list of names that should trigger the rule",
-					"type": ["array", "null"],
+					"type": "array",
 					"items": { "type": "string" }
 				}
 			},
@@ -1467,7 +1834,7 @@
 					"type": ["boolean", "null"]
 				},
 				"noArguments": {
-					"description": "Disallow the use of arguments",
+					"description": "Disallow the use of arguments.",
 					"anyOf": [
 						{ "$ref": "#/definitions/RuleConfiguration" },
 						{ "type": "null" }
@@ -1475,6 +1842,13 @@
 				},
 				"noCommaOperator": {
 					"description": "Disallow comma operator.",
+					"anyOf": [
+						{ "$ref": "#/definitions/RuleConfiguration" },
+						{ "type": "null" }
+					]
+				},
+				"noDefaultExport": {
+					"description": "Disallow default exports.",
 					"anyOf": [
 						{ "$ref": "#/definitions/RuleConfiguration" },
 						{ "type": "null" }
@@ -1550,6 +1924,13 @@
 						{ "type": "null" }
 					]
 				},
+				"noUselessElse": {
+					"description": "Disallow else block when the if block breaks early.",
+					"anyOf": [
+						{ "$ref": "#/definitions/RuleConfiguration" },
+						{ "type": "null" }
+					]
+				},
 				"noVar": {
 					"description": "Disallow the use of var",
 					"anyOf": [
@@ -1560,6 +1941,13 @@
 				"recommended": {
 					"description": "It enables the recommended rules for this group",
 					"type": ["boolean", "null"]
+				},
+				"useAsConstAssertion": {
+					"description": "Enforce the use of as const over literal type and type annotation.",
+					"anyOf": [
+						{ "$ref": "#/definitions/RuleConfiguration" },
+						{ "type": "null" }
+					]
 				},
 				"useBlockStatements": {
 					"description": "Requires following curly brace conventions.",
@@ -1645,6 +2033,13 @@
 						{ "type": "null" }
 					]
 				},
+				"useShorthandAssign": {
+					"description": "Require assignment operator shorthand where possible.",
+					"anyOf": [
+						{ "$ref": "#/definitions/RuleConfiguration" },
+						{ "type": "null" }
+					]
+				},
 				"useSingleCaseStatement": {
 					"description": "Enforces switch clauses have a single statement, emits a quick fix wrapping the statements in a block.",
 					"anyOf": [
@@ -1682,6 +2077,13 @@
 				"all": {
 					"description": "It enables ALL rules for this group.",
 					"type": ["boolean", "null"]
+				},
+				"noApproximativeNumericConstant": {
+					"description": "Use standard constants instead of approximated literals.",
+					"anyOf": [
+						{ "$ref": "#/definitions/RuleConfiguration" },
+						{ "type": "null" }
+					]
 				},
 				"noArrayIndexKey": {
 					"description": "Discourage the usage of Array index in keys.",
@@ -1865,6 +2267,13 @@
 						{ "type": "null" }
 					]
 				},
+				"noImplicitAnyLet": {
+					"description": "Disallow use of implicit any type on variable declarations.",
+					"anyOf": [
+						{ "$ref": "#/definitions/RuleConfiguration" },
+						{ "type": "null" }
+					]
+				},
 				"noImportAssign": {
 					"description": "Disallow assigning to imported bindings",
 					"anyOf": [
@@ -1874,6 +2283,20 @@
 				},
 				"noLabelVar": {
 					"description": "Disallow labels that share a name with a variable",
+					"anyOf": [
+						{ "$ref": "#/definitions/RuleConfiguration" },
+						{ "type": "null" }
+					]
+				},
+				"noMisleadingInstantiator": {
+					"description": "Enforce proper usage of new and constructor.",
+					"anyOf": [
+						{ "$ref": "#/definitions/RuleConfiguration" },
+						{ "type": "null" }
+					]
+				},
+				"noMisrefactoredShorthandAssign": {
+					"description": "Disallow shorthand assign when variable appears on both sides.",
 					"anyOf": [
 						{ "$ref": "#/definitions/RuleConfiguration" },
 						{ "type": "null" }
@@ -1996,6 +2419,31 @@
 				}
 			]
 		},
+		"UtilityClassSortingOptions": {
+			"type": "object",
+			"properties": {
+				"attributes": {
+					"description": "Additional attributes that will be sorted.",
+					"type": ["array", "null"],
+					"items": { "type": "string" }
+				},
+				"functions": {
+					"description": "Names of the functions or tagged templates that will be sorted.",
+					"type": ["array", "null"],
+					"items": { "type": "string" }
+				}
+			},
+			"additionalProperties": false
+		},
+		"ValidAriaRoleOptions": {
+			"type": "object",
+			"required": ["allowInvalidRoles", "ignoreNonDom"],
+			"properties": {
+				"allowInvalidRoles": { "type": "array", "items": { "type": "string" } },
+				"ignoreNonDom": { "type": "boolean" }
+			},
+			"additionalProperties": false
+		},
 		"VcsClientKind": {
 			"oneOf": [
 				{
@@ -2015,6 +2463,10 @@
 						{ "$ref": "#/definitions/VcsClientKind" },
 						{ "type": "null" }
 					]
+				},
+				"defaultBranch": {
+					"description": "The main branch of the project",
+					"type": ["string", "null"]
 				},
 				"enabled": {
 					"description": "Whether Biome should integrate itself with the VCS client",

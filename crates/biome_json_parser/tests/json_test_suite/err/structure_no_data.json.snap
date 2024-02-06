@@ -14,6 +14,7 @@ expression: snapshot
 
 ```
 JsonRoot {
+    bom_token: missing (optional),
     value: missing (required),
     eof_token: EOF@0..0 "" [] [],
 }
@@ -24,7 +25,8 @@ JsonRoot {
 ```
 0: JSON_ROOT@0..0
   0: (empty)
-  1: EOF@0..0 "" [] []
+  1: (empty)
+  2: EOF@0..0 "" [] []
 
 ```
 
@@ -33,12 +35,12 @@ JsonRoot {
 ```
 structure_no_data.json:1:1 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  × expected an array, an object, or a literal but instead found the end of the file
+  × Expected an array, an object, or a literal but instead found the end of the file.
   
   > 1 │ 
       │ 
   
-  i Expected an array, an object, or a literal here
+  i Expected an array, an object, or a literal here.
   
   > 1 │ 
       │ 

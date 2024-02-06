@@ -8,15 +8,14 @@ title: noEmptyBlockStatements (since v1.3.0)
 This rule is part of the [nursery](/linter/rules/#nursery) group.
 :::
 
+Source: <a href="https://eslint.org/docs/latest/rules/no-empty" target="_blank"><code>no-empty</code></a>
+
 Disallow empty block statements and static blocks.
 
 Empty static blocks and block statements, while not technically errors, usually occur due to refactoring that wasn’t completed. They can cause confusion when reading code.
 
 This rule disallows empty block statements and static blocks.
 This rule ignores block statements or static blocks which contain a comment (for example, in an empty catch or finally block of a try statement to indicate that execution should continue regardless of errors).
-
-Source: https://eslint.org/docs/latest/rules/no-empty-static-block/
-Source: https://eslint.org/docs/latest/rules/no-empty/
 
 ## Examples
 
@@ -26,7 +25,7 @@ Source: https://eslint.org/docs/latest/rules/no-empty/
 function emptyFunctionBody () {}
 ```
 
-<pre class="language-text"><code class="language-text">nursery/noEmptyBlockStatements.js:1:31 <a href="https://biomejs.dev/lint/rules/no-empty-block-statements">lint/nursery/noEmptyBlockStatements</a> ━━━━━━━━━━━━━━━━━━━━━━━━━
+<pre class="language-text"><code class="language-text">nursery/noEmptyBlockStatements.js:1:31 <a href="https://biomejs.dev/linter/rules/no-empty-block-statements">lint/nursery/noEmptyBlockStatements</a> ━━━━━━━━━━━━━━━━━━━━━━━━━
 
 <strong><span style="color: Orange;">  </span></strong><strong><span style="color: Orange;">⚠</span></strong> <span style="color: Orange;">Unexpected empty block.</span>
   
@@ -46,7 +45,7 @@ try {
 }
 ```
 
-<pre class="language-text"><code class="language-text">nursery/noEmptyBlockStatements.js:3:13 <a href="https://biomejs.dev/lint/rules/no-empty-block-statements">lint/nursery/noEmptyBlockStatements</a> ━━━━━━━━━━━━━━━━━━━━━━━━━
+<pre class="language-text"><code class="language-text">nursery/noEmptyBlockStatements.js:3:13 <a href="https://biomejs.dev/linter/rules/no-empty-block-statements">lint/nursery/noEmptyBlockStatements</a> ━━━━━━━━━━━━━━━━━━━━━━━━━
 
 <strong><span style="color: Orange;">  </span></strong><strong><span style="color: Orange;">⚠</span></strong> <span style="color: Orange;">Unexpected empty block.</span>
   
@@ -69,7 +68,7 @@ class Foo {
 }
 ```
 
-<pre class="language-text"><code class="language-text">nursery/noEmptyBlockStatements.js:2:3 <a href="https://biomejs.dev/lint/rules/no-empty-block-statements">lint/nursery/noEmptyBlockStatements</a> ━━━━━━━━━━━━━━━━━━━━━━━━━━
+<pre class="language-text"><code class="language-text">nursery/noEmptyBlockStatements.js:2:3 <a href="https://biomejs.dev/linter/rules/no-empty-block-statements">lint/nursery/noEmptyBlockStatements</a> ━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 <strong><span style="color: Orange;">  </span></strong><strong><span style="color: Orange;">⚠</span></strong> <span style="color: Orange;">Unexpected empty block.</span>
   
@@ -83,7 +82,7 @@ class Foo {
   
 </code></pre>
 
-## Valid
+### Valid
 
 ```jsx
 function foo () {

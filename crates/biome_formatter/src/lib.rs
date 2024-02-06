@@ -46,31 +46,36 @@ use crate::group_id::UniqueGroupIdBuilder;
 use crate::prelude::TagKind;
 use std::fmt::Debug;
 
+use crate::builders::syntax_token_cow_slice;
+use crate::comments::{CommentStyle, Comments, SourceComment};
+pub use crate::diagnostics::{ActualStart, FormatError, InvalidDocumentError, PrintError};
 use crate::format_element::document::Document;
 #[cfg(debug_assertions)]
 use crate::printed_tokens::PrintedTokens;
 use crate::printer::{Printer, PrinterOptions};
+use crate::trivia::{format_skipped_token_trivia, format_trimmed_token};
 pub use arguments::{Argument, Arguments};
+use biome_deserialize::{
+    Deserializable, DeserializableValue, DeserializationDiagnostic, TextNumber,
+};
+use biome_deserialize_macros::Deserializable;
+use biome_deserialize_macros::Merge;
+use biome_rowan::{
+    Language, NodeOrToken, SyntaxElement, SyntaxNode, SyntaxResult, SyntaxToken, SyntaxTriviaPiece,
+    TextLen, TextRange, TextSize, TokenAtOffset,
+};
 pub use buffer::{
     Buffer, BufferExtensions, BufferSnapshot, Inspect, PreambleBuffer, RemoveSoftLinesBuffer,
     VecBuffer,
 };
 pub use builders::BestFitting;
-
-use crate::builders::syntax_token_cow_slice;
-use crate::comments::{CommentStyle, Comments, SourceComment};
-pub use crate::diagnostics::{ActualStart, FormatError, InvalidDocumentError, PrintError};
-use crate::trivia::{format_skipped_token_trivia, format_trimmed_token};
-use biome_rowan::{
-    Language, NodeOrToken, SyntaxElement, SyntaxNode, SyntaxResult, SyntaxToken, SyntaxTriviaPiece,
-    TextLen, TextRange, TextSize, TokenAtOffset,
-};
 pub use format_element::{normalize_newlines, FormatElement, LINE_TERMINATORS};
 pub use group_id::GroupId;
 pub use source_map::{TransformSourceMap, TransformSourceMapBuilder};
 use std::marker::PhantomData;
 use std::num::ParseIntError;
 use std::str::FromStr;
+use token::string::Quote;
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
 #[cfg_attr(
@@ -122,6 +127,75 @@ impl std::fmt::Display for IndentStyle {
     }
 }
 
+#[derive(Clone, Copy, Debug, Deserializable, Eq, Hash, Merge, PartialEq)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema),
+    serde(rename_all = "camelCase")
+)]
+#[derive(Default)]
+pub enum LineEnding {
+    ///  Line Feed only (\n), common on Linux and macOS as well as inside git repos
+    #[default]
+    Lf,
+
+    /// Carriage Return + Line Feed characters (\r\n), common on Windows
+    Crlf,
+
+    /// Carriage Return character only (\r), used very rarely
+    Cr,
+}
+
+impl LineEnding {
+    #[inline]
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            LineEnding::Lf => "\n",
+            LineEnding::Crlf => "\r\n",
+            LineEnding::Cr => "\r",
+        }
+    }
+
+    /// Returns `true` if this is a [LineEnding::Lf].
+    pub const fn is_line_feed(&self) -> bool {
+        matches!(self, LineEnding::Lf)
+    }
+
+    /// Returns `true` if this is a [LineEnding::Crlf].
+    pub const fn is_carriage_return_line_feed(&self) -> bool {
+        matches!(self, LineEnding::Crlf)
+    }
+
+    /// Returns `true` if this is a [LineEnding::Cr].
+    pub const fn is_carriage_return(&self) -> bool {
+        matches!(self, LineEnding::Cr)
+    }
+}
+
+impl FromStr for LineEnding {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "lf" => Ok(Self::Lf),
+            "crlf" => Ok(Self::Crlf),
+            "cr" => Ok(Self::Cr),
+            // TODO: replace this error with a diagnostic
+            _ => Err("Value not supported for LineEnding"),
+        }
+    }
+}
+
+impl std::fmt::Display for LineEnding {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LineEnding::Lf => std::write!(f, "LF"),
+            LineEnding::Crlf => std::write!(f, "CRLF"),
+            LineEnding::Cr => std::write!(f, "CR"),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[cfg_attr(
     feature = "serde",
@@ -152,7 +226,7 @@ impl From<u8> for IndentWidth {
 /// Validated value for the `line_width` formatter options
 ///
 /// The allowed range of values is 1..=320
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Merge, PartialEq)]
 #[cfg_attr(
     feature = "serde",
     derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema),
@@ -161,11 +235,13 @@ impl From<u8> for IndentWidth {
 pub struct LineWidth(u16);
 
 impl LineWidth {
+    /// Minimum allowed value for a valid [LineWidth]
+    pub const MIN: u16 = 1;
     /// Maximum allowed value for a valid [LineWidth]
     pub const MAX: u16 = 320;
 
     /// Return the numeric value for this [LineWidth]
-    pub fn value(&self) -> u16 {
+    pub fn get(&self) -> u16 {
         self.0
     }
 }
@@ -173,6 +249,25 @@ impl LineWidth {
 impl Default for LineWidth {
     fn default() -> Self {
         Self(80)
+    }
+}
+
+impl Deserializable for LineWidth {
+    fn deserialize(
+        value: &impl DeserializableValue,
+        name: &str,
+        diagnostics: &mut Vec<DeserializationDiagnostic>,
+    ) -> Option<Self> {
+        let value_text = TextNumber::deserialize(value, name, diagnostics)?;
+        if let Ok(value) = value_text.parse::<Self>() {
+            return Some(value);
+        }
+        diagnostics.push(DeserializationDiagnostic::new_out_of_bound_integer(
+            Self::MIN,
+            Self::MAX,
+            value.range(),
+        ));
+        None
     }
 }
 
@@ -217,7 +312,7 @@ impl TryFrom<u16> for LineWidth {
     type Error = LineWidthFromIntError;
 
     fn try_from(value: u16) -> Result<Self, Self::Error> {
-        if value > 0 && value <= Self::MAX {
+        if (Self::MIN..=Self::MAX).contains(&value) {
             Ok(Self(value))
         } else {
             Err(LineWidthFromIntError(value))
@@ -229,8 +324,9 @@ impl std::fmt::Display for LineWidthFromIntError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(
             f,
-            "The line width exceeds the maximum value ({})",
-            LineWidth::MAX
+            "The line width should be between {} and {}",
+            LineWidth::MIN,
+            LineWidth::MAX,
         )
     }
 }
@@ -238,6 +334,126 @@ impl std::fmt::Display for LineWidthFromIntError {
 impl From<LineWidth> for u16 {
     fn from(value: LineWidth) -> Self {
         value.0
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserializable, Eq, Hash, Merge, PartialEq)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema),
+    serde(rename_all = "camelCase")
+)]
+pub enum QuoteStyle {
+    #[default]
+    Double,
+    Single,
+}
+
+impl QuoteStyle {
+    pub fn as_char(&self) -> char {
+        match self {
+            QuoteStyle::Double => '"',
+            QuoteStyle::Single => '\'',
+        }
+    }
+
+    pub fn as_string(&self) -> &str {
+        match self {
+            QuoteStyle::Double => "\"",
+            QuoteStyle::Single => "'",
+        }
+    }
+
+    /// Returns the quote, prepended with a backslash (escaped)
+    pub fn as_escaped(&self) -> &str {
+        match self {
+            QuoteStyle::Double => "\\\"",
+            QuoteStyle::Single => "\\'",
+        }
+    }
+
+    pub fn as_bytes(&self) -> u8 {
+        self.as_char() as u8
+    }
+
+    /// Returns the quote in HTML entity
+    pub fn as_html_entity(&self) -> &str {
+        match self {
+            QuoteStyle::Double => "&quot;",
+            QuoteStyle::Single => "&apos;",
+        }
+    }
+
+    /// Given the current quote, it returns the other one
+    pub fn other(&self) -> Self {
+        match self {
+            QuoteStyle::Double => QuoteStyle::Single,
+            QuoteStyle::Single => QuoteStyle::Double,
+        }
+    }
+}
+
+impl FromStr for QuoteStyle {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "double" | "Double" => Ok(Self::Double),
+            "single" | "Single" => Ok(Self::Single),
+            // TODO: replace this error with a diagnostic
+            _ => Err("Value not supported for QuoteStyle"),
+        }
+    }
+}
+
+impl std::fmt::Display for QuoteStyle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            QuoteStyle::Double => std::write!(f, "Double Quotes"),
+            QuoteStyle::Single => std::write!(f, "Single Quotes"),
+        }
+    }
+}
+
+impl From<QuoteStyle> for Quote {
+    fn from(quote: QuoteStyle) -> Self {
+        match quote {
+            QuoteStyle::Double => Self::Double,
+            QuoteStyle::Single => Self::Single,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserializable, Eq, Hash, Merge, PartialEq)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema),
+    serde(rename_all = "camelCase")
+)]
+pub enum AttributePosition {
+    #[default]
+    Auto,
+    Multiline,
+}
+
+impl std::fmt::Display for AttributePosition {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AttributePosition::Auto => std::write!(f, "Auto"),
+            AttributePosition::Multiline => std::write!(f, "Multiline"),
+        }
+    }
+}
+
+impl FromStr for AttributePosition {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "multiline" | "Multiline" => Ok(Self::Multiline),
+            "auto" | "Auto" => Ok(Self::Auto),
+            _ => Err("Value not supported for attribute_position. Supported values are 'auto' and 'multiline'."),
+        }
     }
 }
 
@@ -266,6 +482,12 @@ pub trait FormatOptions {
 
     /// What's the max width of a line. Defaults to 80.
     fn line_width(&self) -> LineWidth;
+
+    /// The type of line ending.
+    fn line_ending(&self) -> LineEnding;
+
+    /// The attribute position.
+    fn attribute_position(&self) -> AttributePosition;
 
     /// Derives the print options from the these format options
     fn as_print_options(&self) -> PrinterOptions;
@@ -314,6 +536,8 @@ pub struct SimpleFormatOptions {
     pub indent_style: IndentStyle,
     pub indent_width: IndentWidth,
     pub line_width: LineWidth,
+    pub line_ending: LineEnding,
+    pub attribute_position: AttributePosition,
 }
 
 impl FormatOptions for SimpleFormatOptions {
@@ -329,11 +553,21 @@ impl FormatOptions for SimpleFormatOptions {
         self.line_width
     }
 
+    fn line_ending(&self) -> LineEnding {
+        self.line_ending
+    }
+
+    fn attribute_position(&self) -> AttributePosition {
+        self.attribute_position
+    }
+
     fn as_print_options(&self) -> PrinterOptions {
         PrinterOptions::default()
             .with_indent_style(self.indent_style)
             .with_indent_width(self.indent_width)
             .with_print_width(self.line_width.into())
+            .with_line_ending(self.line_ending)
+            .with_attribute_position(self.attribute_position)
     }
 }
 
@@ -1538,4 +1772,52 @@ where
 pub struct FormatStateSnapshot {
     #[cfg(debug_assertions)]
     printed_tokens: printed_tokens::PrintedTokensSnapshot,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::LineWidth;
+    use biome_deserialize::json::deserialize_from_json_str;
+    use biome_deserialize_macros::Deserializable;
+    use biome_diagnostics::Error;
+
+    #[test]
+    fn test_out_of_range_line_width() {
+        #[derive(Debug, Default, Deserializable, Eq, PartialEq)]
+        struct TestConfig {
+            line_width: LineWidth,
+        }
+
+        struct DiagnosticPrinter<'a> {
+            diagnostics: &'a [Error],
+        }
+
+        impl<'a> DiagnosticPrinter<'a> {
+            fn new(diagnostics: &'a [Error]) -> Self {
+                Self { diagnostics }
+            }
+        }
+
+        impl<'a> std::fmt::Display for DiagnosticPrinter<'a> {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                for diagnostic in self.diagnostics {
+                    diagnostic.description(f)?;
+                }
+                Ok(())
+            }
+        }
+
+        let source = r#"{ "lineWidth": 500 }"#;
+        let deserialized = deserialize_from_json_str::<TestConfig>(source, Default::default(), "");
+        assert_eq!(
+            format!("{}", DiagnosticPrinter::new(deserialized.diagnostics())),
+            "The number should be an integer between 1 and 320."
+        );
+        assert_eq!(
+            deserialized.into_deserialized().unwrap(),
+            TestConfig {
+                line_width: LineWidth(80)
+            }
+        );
+    }
 }

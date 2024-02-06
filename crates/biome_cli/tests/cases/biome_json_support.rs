@@ -1,6 +1,6 @@
 use crate::configs::CONFIG_FORMAT;
-use crate::run_cli;
-use crate::snap_test::{assert_cli_snapshot, SnapshotPayload};
+use crate::snap_test::{assert_cli_snapshot, assert_file_contents, SnapshotPayload};
+use crate::{run_cli, UNFORMATTED};
 use biome_console::BufferConsole;
 use biome_fs::{FileSystemExt, MemoryFileSystem};
 use biome_service::DynRef;
@@ -51,17 +51,7 @@ fn formatter_biome_json() {
 
     assert!(result.is_ok(), "run_cli returned {result:?}");
 
-    let mut file = fs
-        .open(file_path)
-        .expect("formatting target file was removed by the CLI");
-
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .expect("failed to read file from memory FS");
-
-    assert_eq!(content, CUSTOM_CONFIGURATION_AFTER);
-
-    drop(file);
+    assert_file_contents(&fs, file_path, CUSTOM_CONFIGURATION_AFTER);
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
         "formatter_biome_json",
@@ -211,20 +201,53 @@ fn ci_biome_json() {
 
     assert!(result.is_ok(), "run_cli returned {result:?}");
 
-    let mut file = fs
-        .open(input_file)
-        .expect("formatting target file was removed by the CLI");
+    assert_file_contents(&fs, input_file, UNFORMATTED);
 
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .expect("failed to read file from memory FS");
-
-    assert_eq!(content, "  statement(  )  ");
-
-    drop(file);
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
         "ci_biome_json",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn biome_json_is_not_ignored() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    fs.insert(
+        PathBuf::from("biome.json"),
+        r#"{
+        "files": { "ignore": ["*.json"] },
+  "formatter": {
+    "enabled": false
+  }
+}
+"#
+        .as_bytes(),
+    );
+
+    let input_file = Path::new("file.js");
+
+    fs.insert(input_file.into(), "  statement(  )  ".as_bytes());
+
+    let input_file = Path::new("file.json");
+
+    fs.insert(input_file.into(), "  statement(  )  ".as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from([("ci"), "./"].as_slice()),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "biome_json_is_not_ignored",
         fs,
         console,
         result,

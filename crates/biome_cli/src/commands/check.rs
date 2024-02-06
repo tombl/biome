@@ -1,31 +1,36 @@
+use crate::changed::get_changed_files;
 use crate::cli_options::CliOptions;
-use crate::configuration::{load_configuration, LoadedConfiguration};
-use crate::vcs::store_path_to_ignore_from_vcs;
+use crate::commands::{get_stdin, validate_configuration_diagnostics};
 use crate::{
     execute_mode, setup_cli_subscriber, CliDiagnostic, CliSession, Execution, TraversalMode,
 };
-use biome_service::configuration::organize_imports::OrganizeImports;
-use biome_service::configuration::{FormatterConfiguration, LinterConfiguration};
+use biome_deserialize::Merge;
+use biome_service::configuration::organize_imports::PartialOrganizeImports;
+use biome_service::configuration::{
+    load_configuration, LoadedConfiguration, PartialFormatterConfiguration,
+    PartialLinterConfiguration,
+};
 use biome_service::workspace::{FixFileMode, UpdateSettingsParams};
-use biome_service::{Configuration, MergeWith};
+use biome_service::PartialConfiguration;
 use std::ffi::OsString;
-use std::path::PathBuf;
 
 pub(crate) struct CheckCommandPayload {
     pub(crate) apply: bool,
     pub(crate) apply_unsafe: bool,
     pub(crate) cli_options: CliOptions,
-    pub(crate) configuration: Option<Configuration>,
+    pub(crate) configuration: Option<PartialConfiguration>,
     pub(crate) paths: Vec<OsString>,
     pub(crate) stdin_file_path: Option<String>,
     pub(crate) formatter_enabled: Option<bool>,
     pub(crate) linter_enabled: Option<bool>,
     pub(crate) organize_imports_enabled: Option<bool>,
+    pub(crate) changed: bool,
+    pub(crate) since: Option<String>,
 }
 
 /// Handler for the "check" command of the Biome CLI
 pub(crate) fn check(
-    mut session: CliSession,
+    session: CliSession,
     payload: CheckCommandPayload,
 ) -> Result<(), CliDiagnostic> {
     let CheckCommandPayload {
@@ -33,11 +38,13 @@ pub(crate) fn check(
         apply_unsafe,
         cli_options,
         configuration,
-        paths,
+        mut paths,
         stdin_file_path,
         linter_enabled,
         organize_imports_enabled,
         formatter_enabled,
+        since,
+        changed,
     } = payload;
     setup_cli_subscriber(cli_options.log_level.clone(), cli_options.log_kind.clone());
 
@@ -54,9 +61,13 @@ pub(crate) fn check(
         Some(FixFileMode::SafeAndUnsafeFixes)
     };
 
-    let loaded_configuration = load_configuration(&mut session, &cli_options)?.with_file_path();
-
-    loaded_configuration.check_for_errors(session.app.console, cli_options.verbose)?;
+    let loaded_configuration =
+        load_configuration(&session.app.fs, cli_options.as_configuration_base_path())?;
+    validate_configuration_diagnostics(
+        &loaded_configuration,
+        session.app.console,
+        cli_options.verbose,
+    )?;
 
     let LoadedConfiguration {
         configuration: mut fs_configuration,
@@ -66,7 +77,7 @@ pub(crate) fn check(
 
     let formatter = fs_configuration
         .formatter
-        .get_or_insert_with(FormatterConfiguration::default);
+        .get_or_insert_with(PartialFormatterConfiguration::default);
 
     if formatter_enabled.is_some() {
         formatter.enabled = formatter_enabled;
@@ -74,7 +85,7 @@ pub(crate) fn check(
 
     let linter = fs_configuration
         .linter
-        .get_or_insert_with(LinterConfiguration::default);
+        .get_or_insert_with(PartialLinterConfiguration::default);
 
     if linter_enabled.is_some() {
         linter.enabled = linter_enabled;
@@ -82,42 +93,45 @@ pub(crate) fn check(
 
     let organize_imports = fs_configuration
         .organize_imports
-        .get_or_insert_with(OrganizeImports::default);
+        .get_or_insert_with(PartialOrganizeImports::default);
 
     if organize_imports_enabled.is_some() {
         organize_imports.enabled = organize_imports_enabled;
     }
 
-    fs_configuration.merge_with(configuration);
+    if let Some(mut configuration) = configuration {
+        if let Some(linter) = configuration.linter.as_mut() {
+            // Don't overwrite rules from the CLI configuration.
+            // Otherwise, rules that are disabled in the config file might
+            // become re-enabled due to the defaults included in the CLI
+            // configuration.
+            linter.rules = None;
+        }
+        fs_configuration.merge_with(configuration);
+    }
 
     // check if support of git ignore files is enabled
     let vcs_base_path = configuration_path.or(session.app.fs.working_directory());
-    store_path_to_ignore_from_vcs(
-        &mut session,
-        &mut fs_configuration,
-        vcs_base_path,
-        &cli_options,
-    )?;
+    let (vcs_base_path, gitignore_matches) =
+        fs_configuration.retrieve_gitignore_matches(&session.app.fs, vcs_base_path.as_deref())?;
 
-    let stdin = if let Some(stdin_file_path) = stdin_file_path {
-        let console = &mut session.app.console;
-        let input_code = console.read();
-        if let Some(input_code) = input_code {
-            let path = PathBuf::from(stdin_file_path);
-            Some((path, input_code))
-        } else {
-            // we provided the argument without a piped stdin, we bail
-            return Err(CliDiagnostic::missing_argument("stdin", "check"));
-        }
-    } else {
-        None
-    };
+    let stdin = get_stdin(stdin_file_path, &mut *session.app.console, "check")?;
 
+    if since.is_some() && !changed {
+        return Err(CliDiagnostic::incompatible_arguments("since", "changed"));
+    }
+
+    if changed {
+        paths = get_changed_files(&session.app.fs, &fs_configuration, since)?;
+    }
     session
         .app
         .workspace
         .update_settings(UpdateSettingsParams {
+            working_directory: session.app.fs.working_directory(),
             configuration: fs_configuration,
+            vcs_base_path,
+            gitignore_matches,
         })?;
 
     execute_mode(

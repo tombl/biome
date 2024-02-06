@@ -1,4 +1,5 @@
 use crate::JsRuleAction;
+use biome_analyze::RuleSource;
 use biome_analyze::{
     context::RuleContext, declare_rule, ActionCategory, Ast, FixKind, Rule, RuleDiagnostic,
 };
@@ -10,6 +11,7 @@ use biome_js_syntax::{
     JsVariableDeclarator, JsVariableDeclaratorList, TsPropertyParameter, TsReadonlyModifier,
     TsTypeAnnotation,
 };
+use biome_js_syntax::{AnyJsLiteralExpression, AnyTsType};
 use biome_rowan::AstNode;
 use biome_rowan::BatchMutationExt;
 
@@ -23,8 +25,6 @@ declare_rule! {
     /// In contrast to ESLint's rule, this rule allows to use a wide type for `const` declarations.
     /// Moreover, the rule does not recognize `undefined` values, primitive type constructors (String, Number, ...), and `RegExp` type.
     /// These global variables could be shadowed by local ones.
-    ///
-    /// Source: https://typescript-eslint.io/rules/no-inferrable-types
     ///
     /// ## Examples
     ///
@@ -98,6 +98,7 @@ declare_rule! {
     pub(crate) NoInferrableTypes {
         version: "1.0.0",
         name: "noInferrableTypes",
+        source: RuleSource::EslintTypeScript("no-inferrable-types"),
         recommended: true,
         fix_kind: FixKind::Safe,
     }
@@ -149,9 +150,24 @@ impl Rule for NoInferrableTypes {
                 // In const contexts, literal type annotations are rejected.
                 // e.g. `const x: 1 = <literal>`
                 //
+                // However, we ignore `null` and `undefined` literal types,
+                // because in unsafe null mode, TypeScript widen an unannotated variable to `any`.
+                //
                 // In non-const contexts, wide type annotation are rejected.
                 // e.g. `let x: number = <literal>`
-                if (is_const && ty.is_literal_type()) || (!is_const && ty.is_primitive_type()) {
+                //
+                // However, we ignore the case where <literal> is `null`,
+                // because in unsafe null mode, it is possible to assign `null` and `undefined` to any type.
+                if (is_const && is_non_null_literal_type(&ty))
+                    || (!is_const
+                        && ty.is_primitive_type()
+                        && !matches!(
+                            init_expr,
+                            AnyJsExpression::AnyJsLiteralExpression(
+                                AnyJsLiteralExpression::JsNullLiteralExpression(_)
+                            )
+                        ))
+                {
                     return Some(type_annotation);
                 }
             }
@@ -205,4 +221,14 @@ fn has_trivially_inferrable_type(expr: &AnyJsExpression) -> Option<()> {
         }
         _ => None,
     }
+}
+
+fn is_non_null_literal_type(ty: &AnyTsType) -> bool {
+    matches!(
+        ty,
+        AnyTsType::TsBooleanLiteralType(_)
+            | AnyTsType::TsBigintLiteralType(_)
+            | AnyTsType::TsNumberLiteralType(_)
+            | AnyTsType::TsStringLiteralType(_)
+    )
 }

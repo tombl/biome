@@ -8,6 +8,8 @@ title: useExhaustiveDependencies (since v1.0.0)
 This rule is recommended by Biome. A diagnostic error will appear when linting your code.
 :::
 
+Source: <a href="https://github.com/facebook/react/blob/main/packages/eslint-plugin-react-hooks/README.md" target="_blank"><code>exhaustive-deps</code></a>
+
 Enforce all dependencies are correctly specified in a React hook.
 
 This rule is a port of the rule [react-hooks/exhaustive-deps](https://legacy.reactjs.org/docs/hooks-rules.html#eslint-plugin), and it's meant to target projects that uses React.
@@ -23,14 +25,11 @@ The rule will inspect the following **known** hooks:
 - `useMemo`
 - `useImperativeHandle`
 - `useState`
-- `useContext`
 - `useReducer`
 - `useRef`
 - `useDebugValue`
 - `useDeferredValue`
 - `useTransition`
-- `useId`
-- `useSyncExternalStore`
 
 If you want to add more hooks to the rule, check the [#options](options).
 
@@ -45,20 +44,20 @@ function component() {
     let a = 1;
     useEffect(() => {
         console.log(a);
-    });
+    }, []);
 }
 ```
 
 <pre class="language-text"><code class="language-text">correctness/useExhaustiveDependencies.js:5:5 <a href="https://biomejs.dev/linter/rules/use-exhaustive-dependencies">lint/correctness/useExhaustiveDependencies</a> ━━━━━━━━━━━━
 
-<strong><span style="color: Tomato;">  </span></strong><strong><span style="color: Tomato;">✖</span></strong> <span style="color: Tomato;">This hook do not specify all of its dependencies.</span>
+<strong><span style="color: Tomato;">  </span></strong><strong><span style="color: Tomato;">✖</span></strong> <span style="color: Tomato;">This hook does not specify all of its dependencies: a</span>
   
     <strong>3 │ </strong>function component() {
     <strong>4 │ </strong>    let a = 1;
 <strong><span style="color: Tomato;">  </span></strong><strong><span style="color: Tomato;">&gt;</span></strong> <strong>5 │ </strong>    useEffect(() =&gt; {
    <strong>   │ </strong>    <strong><span style="color: Tomato;">^</span></strong><strong><span style="color: Tomato;">^</span></strong><strong><span style="color: Tomato;">^</span></strong><strong><span style="color: Tomato;">^</span></strong><strong><span style="color: Tomato;">^</span></strong><strong><span style="color: Tomato;">^</span></strong><strong><span style="color: Tomato;">^</span></strong><strong><span style="color: Tomato;">^</span></strong><strong><span style="color: Tomato;">^</span></strong>
     <strong>6 │ </strong>        console.log(a);
-    <strong>7 │ </strong>    });
+    <strong>7 │ </strong>    }, []);
   
 <strong><span style="color: lightgreen;">  </span></strong><strong><span style="color: lightgreen;">ℹ</span></strong> <span style="color: lightgreen;">This dependency is not specified in the hook dependency list.</span>
   
@@ -66,8 +65,10 @@ function component() {
     <strong>5 │ </strong>    useEffect(() =&gt; {
 <strong><span style="color: Tomato;">  </span></strong><strong><span style="color: Tomato;">&gt;</span></strong> <strong>6 │ </strong>        console.log(a);
    <strong>   │ </strong>                    <strong><span style="color: Tomato;">^</span></strong>
-    <strong>7 │ </strong>    });
+    <strong>7 │ </strong>    }, []);
     <strong>8 │ </strong>}
+  
+<strong><span style="color: lightgreen;">  </span></strong><strong><span style="color: lightgreen;">ℹ</span></strong> <span style="color: lightgreen;">Either include it or remove the dependency array</span>
   
 </code></pre>
 
@@ -83,7 +84,7 @@ function component() {
 
 <pre class="language-text"><code class="language-text">correctness/useExhaustiveDependencies.js:5:5 <a href="https://biomejs.dev/linter/rules/use-exhaustive-dependencies">lint/correctness/useExhaustiveDependencies</a> ━━━━━━━━━━━━
 
-<strong><span style="color: Tomato;">  </span></strong><strong><span style="color: Tomato;">✖</span></strong> <span style="color: Tomato;">This hook specifies more dependencies than necessary.</span>
+<strong><span style="color: Tomato;">  </span></strong><strong><span style="color: Tomato;">✖</span></strong> <span style="color: Tomato;">This hook specifies more dependencies than necessary: b</span>
   
     <strong>3 │ </strong>function component() {
     <strong>4 │ </strong>    let b = 1;
@@ -117,7 +118,7 @@ function component() {
 
 <pre class="language-text"><code class="language-text">correctness/useExhaustiveDependencies.js:5:5 <a href="https://biomejs.dev/linter/rules/use-exhaustive-dependencies">lint/correctness/useExhaustiveDependencies</a> ━━━━━━━━━━━━
 
-<strong><span style="color: Tomato;">  </span></strong><strong><span style="color: Tomato;">✖</span></strong> <span style="color: Tomato;">This hook specifies more dependencies than necessary.</span>
+<strong><span style="color: Tomato;">  </span></strong><strong><span style="color: Tomato;">✖</span></strong> <span style="color: Tomato;">This hook specifies more dependencies than necessary: setName</span>
   
     <strong>3 │ </strong>function component() {
     <strong>4 │ </strong>    const [name, setName] = useState();
@@ -145,20 +146,20 @@ function component() {
     const b = a + 1;
     useEffect(() => {
         console.log(b);
-    });
+    }, []);
 }
 ```
 
 <pre class="language-text"><code class="language-text">correctness/useExhaustiveDependencies.js:6:5 <a href="https://biomejs.dev/linter/rules/use-exhaustive-dependencies">lint/correctness/useExhaustiveDependencies</a> ━━━━━━━━━━━━
 
-<strong><span style="color: Tomato;">  </span></strong><strong><span style="color: Tomato;">✖</span></strong> <span style="color: Tomato;">This hook do not specify all of its dependencies.</span>
+<strong><span style="color: Tomato;">  </span></strong><strong><span style="color: Tomato;">✖</span></strong> <span style="color: Tomato;">This hook does not specify all of its dependencies: b</span>
   
     <strong>4 │ </strong>    let a = 1;
     <strong>5 │ </strong>    const b = a + 1;
 <strong><span style="color: Tomato;">  </span></strong><strong><span style="color: Tomato;">&gt;</span></strong> <strong>6 │ </strong>    useEffect(() =&gt; {
    <strong>   │ </strong>    <strong><span style="color: Tomato;">^</span></strong><strong><span style="color: Tomato;">^</span></strong><strong><span style="color: Tomato;">^</span></strong><strong><span style="color: Tomato;">^</span></strong><strong><span style="color: Tomato;">^</span></strong><strong><span style="color: Tomato;">^</span></strong><strong><span style="color: Tomato;">^</span></strong><strong><span style="color: Tomato;">^</span></strong><strong><span style="color: Tomato;">^</span></strong>
     <strong>7 │ </strong>        console.log(b);
-    <strong>8 │ </strong>    });
+    <strong>8 │ </strong>    }, []);
   
 <strong><span style="color: lightgreen;">  </span></strong><strong><span style="color: lightgreen;">ℹ</span></strong> <span style="color: lightgreen;">This dependency is not specified in the hook dependency list.</span>
   
@@ -166,12 +167,14 @@ function component() {
     <strong>6 │ </strong>    useEffect(() =&gt; {
 <strong><span style="color: Tomato;">  </span></strong><strong><span style="color: Tomato;">&gt;</span></strong> <strong>7 │ </strong>        console.log(b);
    <strong>   │ </strong>                    <strong><span style="color: Tomato;">^</span></strong>
-    <strong>8 │ </strong>    });
+    <strong>8 │ </strong>    }, []);
     <strong>9 │ </strong>}
+  
+<strong><span style="color: lightgreen;">  </span></strong><strong><span style="color: lightgreen;">ℹ</span></strong> <span style="color: lightgreen;">Either include it or remove the dependency array</span>
   
 </code></pre>
 
-## Valid
+### Valid
 
 ```jsx
 import { useEffect } from "react";
@@ -196,7 +199,7 @@ function component() {
 ```
 
 ```jsx
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 function component() {
     const [name, setName] = useState();
@@ -204,6 +207,16 @@ function component() {
         console.log(name);
         setName("");
     }, [name]);
+}
+```
+
+```jsx
+import { useEffect } from "react";
+let outer = false;
+function component() {
+    useEffect(() => {
+        outer = true;
+    }, []);
 }
 ```
 
@@ -223,7 +236,7 @@ Allows to specify custom hooks - from libraries or internal projects - that can 
 }
 ```
 
-Given the previous example, your hooks be used like this:
+Given the previous example, your hooks can be used like this:
 
 ```jsx
 function Foo() {

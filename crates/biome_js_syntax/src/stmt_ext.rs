@@ -2,8 +2,9 @@
 
 use crate::{
     AnyJsArrayAssignmentPatternElement, AnyJsAssignmentPattern, AnyJsSwitchClause,
-    JsForVariableDeclaration, JsStatementList, JsSyntaxKind, JsSyntaxToken as SyntaxToken,
-    JsVariableDeclaration, JsVariableDeclarator, TsModuleDeclaration, T,
+    JsBreakStatement, JsContinueStatement, JsForVariableDeclaration, JsLabeledStatement,
+    JsStatementList, JsSyntaxKind, JsSyntaxToken as SyntaxToken, JsVariableDeclaration,
+    JsVariableDeclarator, TsModuleDeclaration, T,
 };
 use biome_rowan::{declare_node_union, AstNode, SyntaxResult};
 
@@ -158,6 +159,24 @@ impl TsModuleDeclaration {
 
     pub fn is_namespace(&self) -> SyntaxResult<bool> {
         Ok(self.module_or_namespace()?.kind() == T![namespace])
+    }
+}
+
+impl JsLabeledStatement {
+    pub fn label_token(&self) -> SyntaxResult<SyntaxToken> {
+        self.label()?.value_token()
+    }
+}
+
+impl JsBreakStatement {
+    pub fn label_token(&self) -> Option<SyntaxToken> {
+        self.label()?.value_token().ok()
+    }
+}
+
+impl JsContinueStatement {
+    pub fn label_token(&self) -> Option<SyntaxToken> {
+        self.label()?.value_token().ok()
     }
 }
 

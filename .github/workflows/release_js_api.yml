@@ -61,9 +61,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
 
       - name: Install wasm-pack
         uses: jetli/wasm-pack-action@v0.4.0
@@ -132,9 +132,9 @@ jobs:
           path: packages/@biomejs/js-api/dist
 
       - name: Install Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
           registry-url: 'https://registry.npmjs.org'
 
       - name: Set release infos

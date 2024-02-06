@@ -8,12 +8,23 @@ title: noUselessConstructor (since v1.0.0)
 This rule is recommended by Biome. A diagnostic error will appear when linting your code.
 :::
 
+Source: <a href="https://typescript-eslint.io/rules/no-useless-constructor" target="_blank"><code>no-useless-constructor</code></a>
+
 Disallow unnecessary constructors.
 
 _ES2015_ provides a default class constructor if one is not specified.
 As such, providing an empty constructor or one that delegates into its parent is unnecessary.
 
-Source: https://typescript-eslint.io/rules/no-useless-constructor
+The rule ignores:
+
+- decorated classes;
+- constructors with at least one [parameter property](https://www.typescriptlang.org/docs/handbook/classes.html#parameter-properties);
+- `private` and `protected` constructors.
+
+## Caveat
+
+This rule reports on constructors whose sole purpose is to make a parent constructor public.
+See the last invalid example.
 
 ## Examples
 
@@ -108,7 +119,34 @@ class C {
   
 </code></pre>
 
-## Valid
+```jsx
+class A {
+    protected constructor() {
+        this.prop = 1;
+    }
+}
+
+class B extends A {
+    // Make the parent constructor public.
+    constructor () {
+        super();
+    }
+}
+```
+
+<pre class="language-text"><code class="language-text">complexity/noUselessConstructor.js:2:5 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+<strong><span style="color: Tomato;">  </span></strong><strong><span style="color: Tomato;">✖</span></strong> <span style="color: Tomato;">'protected' modifier can only be used in TypeScript files</span>
+  
+    <strong>1 │ </strong>class A {
+<strong><span style="color: Tomato;">  </span></strong><strong><span style="color: Tomato;">&gt;</span></strong> <strong>2 │ </strong>    protected constructor() {
+   <strong>   │ </strong>    <strong><span style="color: Tomato;">^</span></strong><strong><span style="color: Tomato;">^</span></strong><strong><span style="color: Tomato;">^</span></strong><strong><span style="color: Tomato;">^</span></strong><strong><span style="color: Tomato;">^</span></strong><strong><span style="color: Tomato;">^</span></strong><strong><span style="color: Tomato;">^</span></strong><strong><span style="color: Tomato;">^</span></strong><strong><span style="color: Tomato;">^</span></strong>
+    <strong>3 │ </strong>        this.prop = 1;
+    <strong>4 │ </strong>    }
+  
+</code></pre>
+
+### Valid
 
 ```jsx
 class A {

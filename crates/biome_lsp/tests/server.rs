@@ -2,12 +2,13 @@ use anyhow::bail;
 use anyhow::Context;
 use anyhow::Error;
 use anyhow::Result;
-use biome_fs::RomePath;
+use biome_fs::{MemoryFileSystem, RomePath};
 use biome_lsp::LSPServer;
 use biome_lsp::ServerFactory;
 use biome_lsp::WorkspaceSettings;
 use biome_service::workspace::GetSyntaxTreeResult;
 use biome_service::workspace::{GetFileContentParams, GetSyntaxTreeParams};
+use biome_service::DynRef;
 use futures::channel::mpsc::{channel, Sender};
 use futures::Sink;
 use futures::SinkExt;
@@ -27,7 +28,6 @@ use tower::{Service, ServiceExt};
 use tower_lsp::jsonrpc;
 use tower_lsp::jsonrpc::Response;
 use tower_lsp::lsp_types as lsp;
-use tower_lsp::lsp_types::DidChangeTextDocumentParams;
 use tower_lsp::lsp_types::DidCloseTextDocumentParams;
 use tower_lsp::lsp_types::DidOpenTextDocumentParams;
 use tower_lsp::lsp_types::DocumentFormattingParams;
@@ -44,10 +44,11 @@ use tower_lsp::lsp_types::TextEdit;
 use tower_lsp::lsp_types::VersionedTextDocumentIdentifier;
 use tower_lsp::lsp_types::WorkDoneProgressParams;
 use tower_lsp::lsp_types::{ClientCapabilities, CodeDescription, Url};
+use tower_lsp::lsp_types::{DidChangeConfigurationParams, DidChangeTextDocumentParams};
 use tower_lsp::LspService;
 use tower_lsp::{jsonrpc::Request, lsp_types::InitializeParams};
 
-/// Statically build an [lsp::Url] instance that points to the file at `$path`
+/// Statically build an [Url] instance that points to the file at `$path`
 /// within the workspace. The filesystem path contained in the return URI is
 /// guaranteed to be a valid path for the underlying operating system, but
 /// doesn't have to refer to an existing file on the host machine.
@@ -204,6 +205,21 @@ impl Server {
         .await
     }
 
+    async fn open_untitled_document(&mut self, text: impl Display) -> Result<()> {
+        self.notify(
+            "textDocument/didOpen",
+            DidOpenTextDocumentParams {
+                text_document: TextDocumentItem {
+                    uri: url!("untitled-1"),
+                    language_id: String::from("javascript"),
+                    version: 0,
+                    text: text.to_string(),
+                },
+            },
+        )
+        .await
+    }
+
     /// Opens a document with given contents and given name. The name must contain the extension too
     async fn open_named_document(
         &mut self,
@@ -220,6 +236,15 @@ impl Server {
                     version: 0,
                     text: text.to_string(),
                 },
+            },
+        )
+        .await
+    }
+    async fn load_configuration(&mut self) -> Result<()> {
+        self.notify(
+            "workspace/didChangeConfiguration",
+            DidChangeConfigurationParams {
+                settings: to_value(()).unwrap(),
             },
         )
         .await
@@ -255,9 +280,9 @@ impl Server {
         .await
     }
 
-    /// Basic implementation of the `rome/shutdown` request for tests
-    async fn rome_shutdown(&mut self) -> Result<()> {
-        self.request::<_, ()>("biome/shutdown", "_rome_shutdown", ())
+    /// Basic implementation of the `biome/shutdown` request for tests
+    async fn biome_shutdown(&mut self) -> Result<()> {
+        self.request::<_, ()>("biome/shutdown", "_biome_shutdown", ())
             .await?
             .context("biome/shutdown returned None")?;
         Ok(())
@@ -305,7 +330,6 @@ where
                 let settings = WorkspaceSettings {
                     ..WorkspaceSettings::default()
                 };
-
                 let result =
                     to_value(slice::from_ref(&settings)).context("failed to serialize settings")?;
 
@@ -323,7 +347,7 @@ where
 #[tokio::test]
 async fn basic_lifecycle() -> Result<()> {
     let factory = ServerFactory::default();
-    let (service, client) = factory.create().into_inner();
+    let (service, client) = factory.create(None).into_inner();
     let (stream, sink) = client.split();
     let mut server = Server::new(service);
 
@@ -342,7 +366,7 @@ async fn basic_lifecycle() -> Result<()> {
 #[tokio::test]
 async fn document_lifecycle() -> Result<()> {
     let factory = ServerFactory::default();
-    let (service, client) = factory.create().into_inner();
+    let (service, client) = factory.create(None).into_inner();
     let (stream, sink) = client.split();
     let mut server = Server::new(service);
 
@@ -419,8 +443,9 @@ async fn document_lifecycle() -> Result<()> {
 
     const EXPECTED: &str = "0: JS_MODULE@0..57
   0: (empty)
-  1: JS_DIRECTIVE_LIST@0..0
-  2: JS_MODULE_ITEM_LIST@0..57
+  1: (empty)
+  2: JS_DIRECTIVE_LIST@0..0
+  3: JS_MODULE_ITEM_LIST@0..57
     0: JS_EXPRESSION_STATEMENT@0..18
       0: JS_CALL_EXPRESSION@0..17
         0: JS_IDENTIFIER_EXPRESSION@0..15
@@ -457,7 +482,7 @@ async fn document_lifecycle() -> Result<()> {
           1: JS_CALL_ARGUMENT_LIST@55..55
           2: R_PAREN@55..56 \")\" [] []
       1: SEMICOLON@56..57 \";\" [] []
-  3: EOF@57..57 \"\" [] []
+  4: EOF@57..57 \"\" [] []
 ";
 
     assert_eq!(res.cst, EXPECTED);
@@ -473,7 +498,7 @@ async fn document_lifecycle() -> Result<()> {
 #[tokio::test]
 async fn document_no_extension() -> Result<()> {
     let factory = ServerFactory::default();
-    let (service, client) = factory.create().into_inner();
+    let (service, client) = factory.create(None).into_inner();
     let (stream, sink) = client.split();
     let mut server = Server::new(service);
 
@@ -544,7 +569,7 @@ async fn document_no_extension() -> Result<()> {
 #[tokio::test]
 async fn pull_diagnostics() -> Result<()> {
     let factory = ServerFactory::default();
-    let (service, client) = factory.create().into_inner();
+    let (service, client) = factory.create(None).into_inner();
     let (stream, sink) = client.split();
     let mut server = Server::new(service);
 
@@ -570,12 +595,12 @@ async fn pull_diagnostics() -> Result<()> {
                 uri: url!("document.js"),
                 version: Some(0),
                 diagnostics: vec![lsp::Diagnostic {
-                    range: lsp::Range {
-                        start: lsp::Position {
+                    range: Range {
+                        start: Position {
                             line: 0,
                             character: 5,
                         },
-                        end: lsp::Position {
+                        end: Position {
                             line: 0,
                             character: 7,
                         },
@@ -595,12 +620,156 @@ async fn pull_diagnostics() -> Result<()> {
                     related_information: Some(vec![lsp::DiagnosticRelatedInformation {
                         location: lsp::Location {
                             uri: url!("document.js"),
-                            range: lsp::Range {
-                                start: lsp::Position {
+                            range: Range {
+                                start: Position {
                                     line: 0,
                                     character: 5,
                                 },
-                                end: lsp::Position {
+                                end: Position {
+                                    line: 0,
+                                    character: 7,
+                                },
+                            },
+                        },
+                        message: String::new(),
+                    }]),
+                    tags: None,
+                    data: None,
+                }],
+            }
+        ))
+    );
+
+    server.close_document().await?;
+
+    server.shutdown().await?;
+    reader.abort();
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn pull_diagnostics_of_syntax_rules() -> Result<()> {
+    let factory = ServerFactory::default();
+    let (service, client) = factory.create(None).into_inner();
+    let (stream, sink) = client.split();
+    let mut server = Server::new(service);
+
+    let (sender, mut receiver) = channel(CHANNEL_BUFFER_SIZE);
+    let reader = tokio::spawn(client_handler(stream, sink, sender));
+
+    server.initialize().await?;
+    server.initialized().await?;
+
+    server.open_document("class A { #foo; #foo }").await?;
+
+    let notification = tokio::select! {
+        msg = receiver.next() => msg,
+        _ = sleep(Duration::from_secs(1)) => {
+            panic!("timed out waiting for the server to send diagnostics")
+        }
+    };
+
+    assert_eq!(
+        notification,
+        Some(ServerNotification::PublishDiagnostics(
+            PublishDiagnosticsParams {
+                uri: url!("document.js"),
+                version: Some(0),
+                diagnostics: vec![lsp::Diagnostic {
+                    range: Range {
+                        start: Position {
+                            line: 0,
+                            character: 16,
+                        },
+                        end: Position {
+                            line: 0,
+                            character: 20,
+                        },
+                    },
+                    severity: Some(lsp::DiagnosticSeverity::ERROR),
+                    code: Some(lsp::NumberOrString::String(String::from(
+                        "parse/noDuplicatePrivateClassMembers",
+                    ))),
+                    code_description: None,
+                    source: Some(String::from("biome")),
+                    message: String::from("Duplicate private class member \"#foo\"",),
+                    related_information: None,
+                    tags: None,
+                    data: None,
+                }],
+            }
+        ))
+    );
+
+    server.close_document().await?;
+
+    server.shutdown().await?;
+    reader.abort();
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn pull_diagnostics_from_new_file() -> Result<()> {
+    let factory = ServerFactory::default();
+    let (service, client) = factory.create(None).into_inner();
+    let (stream, sink) = client.split();
+    let mut server = Server::new(service);
+
+    let (sender, mut receiver) = channel(CHANNEL_BUFFER_SIZE);
+    let reader = tokio::spawn(client_handler(stream, sink, sender));
+
+    server.initialize().await?;
+    server.initialized().await?;
+
+    server.open_untitled_document("if(a == b) {}").await?;
+
+    let notification = tokio::select! {
+        msg = receiver.next() => msg,
+        _ = sleep(Duration::from_secs(1)) => {
+            panic!("timed out waiting for the server to send diagnostics")
+        }
+    };
+
+    assert_eq!(
+        notification,
+        Some(ServerNotification::PublishDiagnostics(
+            PublishDiagnosticsParams {
+                uri: url!("untitled-1"),
+                version: Some(0),
+                diagnostics: vec![lsp::Diagnostic {
+                    range: Range {
+                        start: Position {
+                            line: 0,
+                            character: 5,
+                        },
+                        end: Position {
+                            line: 0,
+                            character: 7,
+                        },
+                    },
+                    severity: Some(lsp::DiagnosticSeverity::ERROR),
+                    code: Some(lsp::NumberOrString::String(String::from(
+                        "lint/suspicious/noDoubleEquals",
+                    ))),
+                    code_description: Some(CodeDescription {
+                        href: Url::parse("https://biomejs.dev/linter/rules/no-double-equals")
+                            .unwrap()
+                    }),
+                    source: Some(String::from("biome")),
+                    message: String::from(
+                        "Use === instead of ==.\n== is only allowed when comparing against `null`",
+                    ),
+                    related_information: Some(vec![lsp::DiagnosticRelatedInformation {
+                        location: lsp::Location {
+                            uri: url!("untitled-1"),
+                            range: Range {
+                                start: Position {
+                                    line: 0,
+                                    character: 5,
+                                },
+                                end: Position {
                                     line: 0,
                                     character: 7,
                                 },
@@ -625,9 +794,9 @@ async fn pull_diagnostics() -> Result<()> {
 
 fn fixable_diagnostic(line: u32) -> Result<lsp::Diagnostic> {
     Ok(lsp::Diagnostic {
-        range: lsp::Range {
-            start: lsp::Position { line, character: 3 },
-            end: lsp::Position {
+        range: Range {
+            start: Position { line, character: 3 },
+            end: Position {
                 line,
                 character: 11,
             },
@@ -648,7 +817,7 @@ fn fixable_diagnostic(line: u32) -> Result<lsp::Diagnostic> {
 #[tokio::test]
 async fn pull_quick_fixes() -> Result<()> {
     let factory = ServerFactory::default();
-    let (service, client) = factory.create().into_inner();
+    let (service, client) = factory.create(None).into_inner();
     let (stream, sink) = client.split();
     let mut server = Server::new(service);
 
@@ -665,15 +834,15 @@ async fn pull_quick_fixes() -> Result<()> {
             "textDocument/codeAction",
             "pull_code_actions",
             lsp::CodeActionParams {
-                text_document: lsp::TextDocumentIdentifier {
+                text_document: TextDocumentIdentifier {
                     uri: url!("document.js"),
                 },
-                range: lsp::Range {
-                    start: lsp::Position {
+                range: Range {
+                    start: Position {
                         line: 0,
                         character: 6,
                     },
-                    end: lsp::Position {
+                    end: Position {
                         line: 0,
                         character: 6,
                     },
@@ -683,7 +852,7 @@ async fn pull_quick_fixes() -> Result<()> {
                     only: Some(vec![lsp::CodeActionKind::QUICKFIX]),
                     ..Default::default()
                 },
-                work_done_progress_params: lsp::WorkDoneProgressParams {
+                work_done_progress_params: WorkDoneProgressParams {
                     work_done_token: None,
                 },
                 partial_result_params: lsp::PartialResultParams {
@@ -697,13 +866,13 @@ async fn pull_quick_fixes() -> Result<()> {
     let mut changes = HashMap::default();
     changes.insert(
         url!("document.js"),
-        vec![lsp::TextEdit {
-            range: lsp::Range {
-                start: lsp::Position {
+        vec![TextEdit {
+            range: Range {
+                start: Position {
                     line: 0,
                     character: 9,
                 },
-                end: lsp::Position {
+                end: Position {
                     line: 0,
                     character: 10,
                 },
@@ -732,13 +901,13 @@ async fn pull_quick_fixes() -> Result<()> {
     let mut suppression_changes = HashMap::default();
     suppression_changes.insert(
         url!("document.js"),
-        vec![lsp::TextEdit {
-            range: lsp::Range {
-                start: lsp::Position {
+        vec![TextEdit {
+            range: Range {
+                start: Position {
                     line: 0,
                     character: 0,
                 },
-                end: lsp::Position {
+                end: Position {
                     line: 0,
                     character: 0,
                 },
@@ -779,17 +948,17 @@ async fn pull_quick_fixes() -> Result<()> {
 #[tokio::test]
 async fn pull_biome_quick_fixes_ignore_unsafe() -> Result<()> {
     let factory = ServerFactory::default();
-    let (service, client) = factory.create().into_inner();
+    let (service, client) = factory.create(None).into_inner();
     let (stream, sink) = client.split();
     let mut server = Server::new(service);
 
     let unsafe_fixable = lsp::Diagnostic {
-        range: lsp::Range {
-            start: lsp::Position {
+        range: Range {
+            start: Position {
                 line: 0,
                 character: 6,
             },
-            end: lsp::Position {
+            end: Position {
                 line: 0,
                 character: 9,
             },
@@ -819,15 +988,15 @@ async fn pull_biome_quick_fixes_ignore_unsafe() -> Result<()> {
             "textDocument/codeAction",
             "pull_code_actions",
             lsp::CodeActionParams {
-                text_document: lsp::TextDocumentIdentifier {
+                text_document: TextDocumentIdentifier {
                     uri: url!("document.js"),
                 },
-                range: lsp::Range {
-                    start: lsp::Position {
+                range: Range {
+                    start: Position {
                         line: 0,
                         character: 6,
                     },
-                    end: lsp::Position {
+                    end: Position {
                         line: 0,
                         character: 6,
                     },
@@ -837,7 +1006,7 @@ async fn pull_biome_quick_fixes_ignore_unsafe() -> Result<()> {
                     only: Some(vec![lsp::CodeActionKind::new("quickfix.biome")]),
                     ..Default::default()
                 },
-                work_done_progress_params: lsp::WorkDoneProgressParams {
+                work_done_progress_params: WorkDoneProgressParams {
                     work_done_token: None,
                 },
                 partial_result_params: lsp::PartialResultParams {
@@ -861,7 +1030,7 @@ async fn pull_biome_quick_fixes_ignore_unsafe() -> Result<()> {
 #[tokio::test]
 async fn pull_biome_quick_fixes() -> Result<()> {
     let factory = ServerFactory::default();
-    let (service, client) = factory.create().into_inner();
+    let (service, client) = factory.create(None).into_inner();
     let (stream, sink) = client.split();
     let mut server = Server::new(service);
 
@@ -878,15 +1047,15 @@ async fn pull_biome_quick_fixes() -> Result<()> {
             "textDocument/codeAction",
             "pull_code_actions",
             lsp::CodeActionParams {
-                text_document: lsp::TextDocumentIdentifier {
+                text_document: TextDocumentIdentifier {
                     uri: url!("document.js"),
                 },
-                range: lsp::Range {
-                    start: lsp::Position {
+                range: Range {
+                    start: Position {
                         line: 0,
                         character: 6,
                     },
-                    end: lsp::Position {
+                    end: Position {
                         line: 0,
                         character: 10,
                     },
@@ -896,7 +1065,7 @@ async fn pull_biome_quick_fixes() -> Result<()> {
                     only: Some(vec![lsp::CodeActionKind::new("quickfix.biome")]),
                     ..Default::default()
                 },
-                work_done_progress_params: lsp::WorkDoneProgressParams {
+                work_done_progress_params: WorkDoneProgressParams {
                     work_done_token: None,
                 },
                 partial_result_params: lsp::PartialResultParams {
@@ -910,13 +1079,13 @@ async fn pull_biome_quick_fixes() -> Result<()> {
     let mut changes = HashMap::default();
     changes.insert(
         url!("document.js"),
-        vec![lsp::TextEdit {
-            range: lsp::Range {
-                start: lsp::Position {
+        vec![TextEdit {
+            range: Range {
+                start: Position {
                     line: 0,
                     character: 9,
                 },
-                end: lsp::Position {
+                end: Position {
                     line: 0,
                     character: 10,
                 },
@@ -955,17 +1124,17 @@ async fn pull_biome_quick_fixes() -> Result<()> {
 #[tokio::test]
 async fn pull_quick_fixes_include_unsafe() -> Result<()> {
     let factory = ServerFactory::default();
-    let (service, client) = factory.create().into_inner();
+    let (service, client) = factory.create(None).into_inner();
     let (stream, sink) = client.split();
     let mut server = Server::new(service);
 
     let unsafe_fixable = lsp::Diagnostic {
-        range: lsp::Range {
-            start: lsp::Position {
+        range: Range {
+            start: Position {
                 line: 0,
                 character: 6,
             },
-            end: lsp::Position {
+            end: Position {
                 line: 0,
                 character: 9,
             },
@@ -995,15 +1164,15 @@ async fn pull_quick_fixes_include_unsafe() -> Result<()> {
             "textDocument/codeAction",
             "pull_code_actions",
             lsp::CodeActionParams {
-                text_document: lsp::TextDocumentIdentifier {
+                text_document: TextDocumentIdentifier {
                     uri: url!("document.js"),
                 },
-                range: lsp::Range {
-                    start: lsp::Position {
+                range: Range {
+                    start: Position {
                         line: 0,
                         character: 6,
                     },
-                    end: lsp::Position {
+                    end: Position {
                         line: 0,
                         character: 6,
                     },
@@ -1013,7 +1182,7 @@ async fn pull_quick_fixes_include_unsafe() -> Result<()> {
                     only: Some(vec![]),
                     ..Default::default()
                 },
-                work_done_progress_params: lsp::WorkDoneProgressParams {
+                work_done_progress_params: WorkDoneProgressParams {
                     work_done_token: None,
                 },
                 partial_result_params: lsp::PartialResultParams {
@@ -1027,13 +1196,13 @@ async fn pull_quick_fixes_include_unsafe() -> Result<()> {
     let mut changes = HashMap::default();
     changes.insert(
         url!("document.js"),
-        vec![lsp::TextEdit {
-            range: lsp::Range {
-                start: lsp::Position {
+        vec![TextEdit {
+            range: Range {
+                start: Position {
                     line: 0,
                     character: 7,
                 },
-                end: lsp::Position {
+                end: Position {
                     line: 0,
                     character: 7,
                 },
@@ -1062,13 +1231,13 @@ async fn pull_quick_fixes_include_unsafe() -> Result<()> {
     let mut suppression_changes = HashMap::default();
     suppression_changes.insert(
         url!("document.js"),
-        vec![lsp::TextEdit {
-            range: lsp::Range {
-                start: lsp::Position {
+        vec![TextEdit {
+            range: Range {
+                start: Position {
                     line: 0,
                     character: 0,
                 },
-                end: lsp::Position {
+                end: Position {
                     line: 0,
                     character: 0,
                 },
@@ -1109,7 +1278,7 @@ async fn pull_quick_fixes_include_unsafe() -> Result<()> {
 #[tokio::test]
 async fn pull_diagnostics_for_rome_json() -> Result<()> {
     let factory = ServerFactory::default();
-    let (service, client) = factory.create().into_inner();
+    let (service, client) = factory.create(None).into_inner();
     let (stream, sink) = client.split();
     let mut server = Server::new(service);
 
@@ -1142,12 +1311,12 @@ async fn pull_diagnostics_for_rome_json() -> Result<()> {
                 uri: url!("biome.json"),
                 version: Some(0),
                 diagnostics: vec![lsp::Diagnostic {
-                    range: lsp::Range {
-                        start: lsp::Position {
+                    range: Range {
+                        start: Position {
                             line: 2,
                             character: 27,
                         },
-                        end: lsp::Position {
+                        end: Position {
                             line: 2,
                             character: 34,
                         },
@@ -1176,7 +1345,7 @@ async fn pull_diagnostics_for_rome_json() -> Result<()> {
 #[tokio::test]
 async fn no_code_actions_for_ignored_json_files() -> Result<()> {
     let factory = ServerFactory::default();
-    let (service, client) = factory.create().into_inner();
+    let (service, client) = factory.create(None).into_inner();
     let (stream, sink) = client.split();
     let mut server = Server::new(service);
 
@@ -1219,15 +1388,15 @@ async fn no_code_actions_for_ignored_json_files() -> Result<()> {
             "textDocument/codeAction",
             "pull_code_actions",
             lsp::CodeActionParams {
-                text_document: lsp::TextDocumentIdentifier {
+                text_document: TextDocumentIdentifier {
                     uri: url!("./node_modules/preact/package.json"),
                 },
-                range: lsp::Range {
-                    start: lsp::Position {
+                range: Range {
+                    start: Position {
                         line: 0,
                         character: 7,
                     },
-                    end: lsp::Position {
+                    end: Position {
                         line: 0,
                         character: 7,
                     },
@@ -1236,7 +1405,7 @@ async fn no_code_actions_for_ignored_json_files() -> Result<()> {
                     diagnostics: vec![],
                     ..Default::default()
                 },
-                work_done_progress_params: lsp::WorkDoneProgressParams {
+                work_done_progress_params: WorkDoneProgressParams {
                     work_done_token: None,
                 },
                 partial_result_params: lsp::PartialResultParams {
@@ -1260,7 +1429,7 @@ async fn no_code_actions_for_ignored_json_files() -> Result<()> {
 #[tokio::test]
 async fn pull_code_actions_with_import_sorting() -> Result<()> {
     let factory = ServerFactory::default();
-    let (service, client) = factory.create().into_inner();
+    let (service, client) = factory.create(None).into_inner();
     let (stream, sink) = client.split();
     let mut server = Server::new(service);
 
@@ -1287,15 +1456,15 @@ if(a === -0) {}
             "textDocument/codeAction",
             "pull_code_actions",
             lsp::CodeActionParams {
-                text_document: lsp::TextDocumentIdentifier {
+                text_document: TextDocumentIdentifier {
                     uri: url!("document.js"),
                 },
-                range: lsp::Range {
-                    start: lsp::Position {
+                range: Range {
+                    start: Position {
                         line: 0,
                         character: 6,
                     },
-                    end: lsp::Position {
+                    end: Position {
                         line: 0,
                         character: 10,
                     },
@@ -1304,7 +1473,7 @@ if(a === -0) {}
                     diagnostics: vec![fixable_diagnostic(0)?],
                     ..Default::default()
                 },
-                work_done_progress_params: lsp::WorkDoneProgressParams {
+                work_done_progress_params: WorkDoneProgressParams {
                     work_done_token: None,
                 },
                 partial_result_params: lsp::PartialResultParams {
@@ -1319,91 +1488,91 @@ if(a === -0) {}
     changes.insert(
         url!("document.js"),
         vec![
-            lsp::TextEdit {
-                range: lsp::Range {
-                    start: lsp::Position {
+            TextEdit {
+                range: Range {
+                    start: Position {
                         line: 1,
                         character: 7,
                     },
-                    end: lsp::Position {
+                    end: Position {
                         line: 1,
                         character: 8,
                     },
                 },
                 new_text: String::from("{ describe }"),
             },
-            lsp::TextEdit {
-                range: lsp::Range {
-                    start: lsp::Position {
+            TextEdit {
+                range: Range {
+                    start: Position {
                         line: 1,
                         character: 15,
                     },
-                    end: lsp::Position {
+                    end: Position {
                         line: 1,
                         character: 18,
                     },
                 },
                 new_text: String::from("node:test"),
             },
-            lsp::TextEdit {
-                range: lsp::Range {
-                    start: lsp::Position {
+            TextEdit {
+                range: Range {
+                    start: Position {
                         line: 2,
                         character: 7,
                     },
-                    end: lsp::Position {
+                    end: Position {
                         line: 2,
                         character: 13,
                     },
                 },
                 new_text: String::from("z"),
             },
-            lsp::TextEdit {
-                range: lsp::Range {
-                    start: lsp::Position {
+            TextEdit {
+                range: Range {
+                    start: Position {
                         line: 2,
                         character: 14,
                     },
-                    end: lsp::Position {
+                    end: Position {
                         line: 2,
                         character: 16,
                     },
                 },
                 new_text: String::new(),
             },
-            lsp::TextEdit {
-                range: lsp::Range {
-                    start: lsp::Position {
+            TextEdit {
+                range: Range {
+                    start: Position {
                         line: 2,
                         character: 22,
                     },
-                    end: lsp::Position {
+                    end: Position {
                         line: 2,
                         character: 28,
                     },
                 },
                 new_text: String::from("zod"),
             },
-            lsp::TextEdit {
-                range: lsp::Range {
-                    start: lsp::Position {
+            TextEdit {
+                range: Range {
+                    start: Position {
                         line: 3,
                         character: 9,
                     },
-                    end: lsp::Position {
+                    end: Position {
                         line: 3,
                         character: 17,
                     },
                 },
                 new_text: String::from("test"),
             },
-            lsp::TextEdit {
-                range: lsp::Range {
-                    start: lsp::Position {
+            TextEdit {
+                range: Range {
+                    start: Position {
                         line: 3,
                         character: 26,
                     },
-                    end: lsp::Position {
+                    end: Position {
                         line: 3,
                         character: 35,
                     },
@@ -1441,7 +1610,7 @@ if(a === -0) {}
 #[tokio::test]
 async fn pull_refactors() -> Result<()> {
     let factory = ServerFactory::default();
-    let (service, client) = factory.create().into_inner();
+    let (service, client) = factory.create(None).into_inner();
     let (stream, sink) = client.split();
     let mut server = Server::new(service);
 
@@ -1460,15 +1629,15 @@ async fn pull_refactors() -> Result<()> {
             "textDocument/codeAction",
             "pull_code_actions",
             lsp::CodeActionParams {
-                text_document: lsp::TextDocumentIdentifier {
+                text_document: TextDocumentIdentifier {
                     uri: url!("document.js"),
                 },
-                range: lsp::Range {
-                    start: lsp::Position {
+                range: Range {
+                    start: Position {
                         line: 0,
                         character: 7,
                     },
-                    end: lsp::Position {
+                    end: Position {
                         line: 0,
                         character: 7,
                     },
@@ -1478,7 +1647,7 @@ async fn pull_refactors() -> Result<()> {
                     only: Some(vec![lsp::CodeActionKind::REFACTOR]),
                     ..Default::default()
                 },
-                work_done_progress_params: lsp::WorkDoneProgressParams {
+                work_done_progress_params: WorkDoneProgressParams {
                     work_done_token: None,
                 },
                 partial_result_params: lsp::PartialResultParams {
@@ -1494,26 +1663,26 @@ async fn pull_refactors() -> Result<()> {
     changes.insert(
         url!("document.js"),
         vec![
-            lsp::TextEdit {
-                range: lsp::Range {
-                    start: lsp::Position {
+            TextEdit {
+                range: Range {
+                    start: Position {
                         line: 0,
                         character: 0,
                     },
-                    end: lsp::Position {
+                    end: Position {
                         line: 0,
                         character: 15,
                     },
                 },
                 new_text: String::from("func("),
             },
-            lsp::TextEdit {
-                range: lsp::Range {
-                    start: lsp::Position {
+            TextEdit {
+                range: Range {
+                    start: Position {
                         line: 0,
                         character: 22,
                     },
-                    end: lsp::Position {
+                    end: Position {
                         line: 0,
                         character: 37,
                     },
@@ -1553,7 +1722,7 @@ async fn pull_refactors() -> Result<()> {
 #[tokio::test]
 async fn pull_fix_all() -> Result<()> {
     let factory = ServerFactory::default();
-    let (service, client) = factory.create().into_inner();
+    let (service, client) = factory.create(None).into_inner();
     let (stream, sink) = client.split();
     let mut server = Server::new(service);
 
@@ -1572,15 +1741,15 @@ async fn pull_fix_all() -> Result<()> {
             "textDocument/codeAction",
             "pull_code_actions",
             lsp::CodeActionParams {
-                text_document: lsp::TextDocumentIdentifier {
+                text_document: TextDocumentIdentifier {
                     uri: url!("document.js"),
                 },
-                range: lsp::Range {
-                    start: lsp::Position {
+                range: Range {
+                    start: Position {
                         line: 0,
                         character: 7,
                     },
-                    end: lsp::Position {
+                    end: Position {
                         line: 0,
                         character: 7,
                     },
@@ -1594,7 +1763,7 @@ async fn pull_fix_all() -> Result<()> {
                     only: Some(vec![lsp::CodeActionKind::new("source.fixAll")]),
                     ..Default::default()
                 },
-                work_done_progress_params: lsp::WorkDoneProgressParams {
+                work_done_progress_params: WorkDoneProgressParams {
                     work_done_token: None,
                 },
                 partial_result_params: lsp::PartialResultParams {
@@ -1609,13 +1778,13 @@ async fn pull_fix_all() -> Result<()> {
 
     changes.insert(
         url!("document.js"),
-        vec![lsp::TextEdit {
-            range: lsp::Range {
-                start: lsp::Position {
+        vec![TextEdit {
+            range: Range {
+                start: Position {
                     line: 0,
                     character: 0,
                 },
-                end: lsp::Position {
+                end: Position {
                     line: 3,
                     character: 0,
                 },
@@ -1656,7 +1825,7 @@ async fn pull_fix_all() -> Result<()> {
 #[tokio::test]
 async fn change_document_remove_line() -> Result<()> {
     let factory = ServerFactory::default();
-    let (service, client) = factory.create().into_inner();
+    let (service, client) = factory.create(None).into_inner();
     let (stream, sink) = client.split();
     let mut server = Server::new(service);
 
@@ -1723,7 +1892,7 @@ isSpreadAssignment;
 #[tokio::test]
 async fn format_with_syntax_errors() -> Result<()> {
     let factory = ServerFactory::default();
-    let (service, client) = factory.create().into_inner();
+    let (service, client) = factory.create(None).into_inner();
     let (stream, sink) = client.split();
     let mut server = Server::new(service);
 
@@ -1770,9 +1939,76 @@ async fn format_with_syntax_errors() -> Result<()> {
 }
 
 #[tokio::test]
+async fn does_not_format_ignored_files() -> Result<()> {
+    let factory = ServerFactory::default();
+    let mut fs = MemoryFileSystem::default();
+    let config = r#"{
+        "files": {
+            "ignore": ["document.js"]
+        }
+    }"#;
+
+    fs.insert(url!("biome.json").to_file_path().unwrap(), config);
+    let (service, client) = factory
+        .create_with_fs(None, DynRef::Owned(Box::new(fs)))
+        .into_inner();
+    let (stream, sink) = client.split();
+    let mut server = Server::new(service);
+
+    let (sender, _) = channel(CHANNEL_BUFFER_SIZE);
+    let reader = tokio::spawn(client_handler(stream, sink, sender));
+
+    server.initialize().await?;
+    server.initialized().await?;
+
+    server
+        .open_named_document(config, url!("biome.json"), "json")
+        .await?;
+
+    server
+        .open_named_document("statement (   );", url!("document.js"), "js")
+        .await?;
+
+    server.load_configuration().await?;
+
+    let res: Option<Vec<TextEdit>> = server
+        .request(
+            "textDocument/formatting",
+            "formatting",
+            DocumentFormattingParams {
+                text_document: TextDocumentIdentifier {
+                    uri: url!("document.js"),
+                },
+                options: FormattingOptions {
+                    tab_size: 4,
+                    insert_spaces: false,
+                    properties: HashMap::default(),
+                    trim_trailing_whitespace: None,
+                    insert_final_newline: None,
+                    trim_final_newlines: None,
+                },
+                work_done_progress_params: WorkDoneProgressParams {
+                    work_done_token: None,
+                },
+            },
+        )
+        .await?
+        .context("formatting returned None")?;
+
+    assert!(res.is_none());
+
+    server.close_document().await?;
+
+    server.shutdown().await?;
+    reader.abort();
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn server_shutdown() -> Result<()> {
     let factory = ServerFactory::default();
-    let (service, client) = factory.create().into_inner();
+    let (service, client) = factory.create(None).into_inner();
     let (stream, sink) = client.split();
     let mut server = Server::new(service);
 
@@ -1785,7 +2021,7 @@ async fn server_shutdown() -> Result<()> {
     let cancellation = factory.cancellation();
     let cancellation = cancellation.notified();
 
-    server.rome_shutdown().await?;
+    server.biome_shutdown().await?;
 
     cancellation.await;
 

@@ -1,4 +1,5 @@
 JsModule {
+    bom_token: missing (optional),
     interpreter_token: missing (optional),
     directives: JsDirectiveList [],
     items: JsModuleItemList [
@@ -137,8 +138,9 @@ JsModule {
 
 0: JS_MODULE@0..154
   0: (empty)
-  1: JS_DIRECTIVE_LIST@0..0
-  2: JS_MODULE_ITEM_LIST@0..153
+  1: (empty)
+  2: JS_DIRECTIVE_LIST@0..0
+  3: JS_MODULE_ITEM_LIST@0..153
     0: JS_EXPORT@0..9
       0: JS_DECORATOR_LIST@0..0
       1: EXPORT_KW@0..7 "export" [] [Whitespace(" ")]
@@ -242,7 +244,7 @@ JsModule {
         4: (empty)
         5: (empty)
         6: SEMICOLON@152..153 ";" [] []
-  3: EOF@153..154 "" [Newline("\n")] []
+  4: EOF@153..154 "" [Newline("\n")] []
 --
 export_from_clause_err.js:1:9 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -258,7 +260,7 @@ export_from_clause_err.js:1:9 parse ━━━━━━━━━━━━━━�
 --
 export_from_clause_err.js:2:15 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  × expected a string literal but instead found '5'
+  × Expected a string literal but instead found '5'.
   
     1 │ export *;
   > 2 │ export * from 5;
@@ -266,7 +268,7 @@ export_from_clause_err.js:2:15 parse ━━━━━━━━━━━━━━�
     3 │ export as from "test";
     4 │ export from "test";
   
-  i Expected a string literal here
+  i Expected a string literal here.
   
     1 │ export *;
   > 2 │ export * from 5;
@@ -333,7 +335,7 @@ export_from_clause_err.js:5:14 parse ━━━━━━━━━━━━━━�
 --
 export_from_clause_err.js:6:19 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  × expected a string literal but instead found ';'
+  × Expected a string literal but instead found ';'.
   
     4 │ export from "test";
     5 │ export type *;
@@ -342,7 +344,7 @@ export_from_clause_err.js:6:19 parse ━━━━━━━━━━━━━━�
     7 │ export type * as from;
     8 │ export type * as ns from;
   
-  i Expected a string literal here
+  i Expected a string literal here.
   
     4 │ export from "test";
     5 │ export type *;
@@ -368,7 +370,7 @@ export_from_clause_err.js:7:22 parse ━━━━━━━━━━━━━━�
 --
 export_from_clause_err.js:8:25 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  × expected a string literal but instead found ';'
+  × Expected a string literal but instead found ';'.
   
     6 │ export type * from;
     7 │ export type * as from;
@@ -376,7 +378,7 @@ export_from_clause_err.js:8:25 parse ━━━━━━━━━━━━━━�
       │                         ^
     9 │ 
   
-  i Expected a string literal here
+  i Expected a string literal here.
   
     6 │ export type * from;
     7 │ export type * as from;

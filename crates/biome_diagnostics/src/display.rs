@@ -6,7 +6,7 @@ use unicode_width::UnicodeWidthStr;
 
 mod backtrace;
 mod diff;
-mod frame;
+pub(super) mod frame;
 mod message;
 
 use crate::display::frame::SourceFile;
@@ -142,6 +142,11 @@ impl<'fmt, D: Diagnostic + ?Sized> fmt::Display for PrintHeader<'fmt, D> {
             })?;
         }
 
+        if tags.contains(DiagnosticTags::VERBOSE) {
+            fmt.write_markup(markup! {
+                <Inverse>" VERBOSE "</Inverse>" "
+            })?;
+        }
         if diagnostic.severity() == Severity::Fatal {
             fmt.write_markup(markup! {
                 <Inverse><Error>" FATAL "</Error></Inverse>" "

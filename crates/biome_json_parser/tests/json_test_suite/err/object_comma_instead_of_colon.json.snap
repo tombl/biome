@@ -14,6 +14,7 @@ expression: snapshot
 
 ```
 JsonRoot {
+    bom_token: missing (optional),
     value: JsonObjectValue {
         l_curly_token: L_CURLY@0..1 "{" [] [],
         json_member_list: JsonMemberList [
@@ -43,7 +44,8 @@ JsonRoot {
 
 ```
 0: JSON_ROOT@0..11
-  0: JSON_OBJECT_VALUE@0..11
+  0: (empty)
+  1: JSON_OBJECT_VALUE@0..11
     0: L_CURLY@0..1 "{" [] []
     1: JSON_MEMBER_LIST@1..10
       0: JSON_MEMBER@1..4
@@ -58,7 +60,7 @@ JsonRoot {
         2: JSON_NULL_VALUE@6..10
           0: NULL_KW@6..10 "null" [] []
     2: R_CURLY@10..11 "}" [] []
-  1: EOF@11..11 "" [] []
+  2: EOF@11..11 "" [] []
 
 ```
 
@@ -76,12 +78,12 @@ object_comma_instead_of_colon.json:1:5 parse ━━━━━━━━━━━�
   
 object_comma_instead_of_colon.json:1:7 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  × expected a property but instead found 'null'
+  × Expected a property but instead found 'null'.
   
   > 1 │ {"x", null}
       │       ^^^^
   
-  i Expected a property here
+  i Expected a property here.
   
   > 1 │ {"x", null}
       │       ^^^^

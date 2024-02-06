@@ -1,10 +1,11 @@
 use crate::{
     AnyJsArrowFunctionParameters, AnyJsBinding, AnyJsClass, AnyJsClassMember, AnyJsClassMemberName,
     AnyJsFunction, AnyJsFunctionBody, AnyTsPropertyAnnotation, AnyTsVariableAnnotation,
-    JsClassMemberList, JsDecoratorList, JsExtendsClause, JsSyntaxToken, TsImplementsClause,
-    TsReturnTypeAnnotation, TsTypeAnnotation, TsTypeParameters,
+    JsClassMemberList, JsDecoratorList, JsExtendsClause, JsInitializerClause, JsSyntaxToken,
+    JsVariableDeclarator, TsImplementsClause, TsReturnTypeAnnotation, TsTypeAnnotation,
+    TsTypeParameters,
 };
-use biome_rowan::{AstSeparatedList, SyntaxResult};
+use biome_rowan::{AstNode, AstSeparatedList, SyntaxResult};
 
 impl AnyJsClass {
     pub fn decorators(&self) -> JsDecoratorList {
@@ -31,11 +32,11 @@ impl AnyJsClass {
         }
     }
 
-    pub fn id(&self) -> SyntaxResult<Option<AnyJsBinding>> {
+    pub fn id(&self) -> Option<AnyJsBinding> {
         match self {
-            AnyJsClass::JsClassDeclaration(declaration) => declaration.id().map(Some),
-            AnyJsClass::JsClassExpression(expression) => Ok(expression.id()),
-            AnyJsClass::JsClassExportDefaultDeclaration(declaration) => Ok(declaration.id()),
+            AnyJsClass::JsClassDeclaration(declaration) => declaration.id().ok(),
+            AnyJsClass::JsClassExpression(expression) => expression.id(),
+            AnyJsClass::JsClassExportDefaultDeclaration(declaration) => declaration.id(),
         }
     }
 
@@ -145,6 +146,24 @@ impl AnyJsFunction {
             AnyJsFunction::JsFunctionDeclaration(declaration) => declaration.async_token(),
             AnyJsFunction::JsFunctionExportDefaultDeclaration(declaration) => {
                 declaration.async_token()
+            }
+        }
+    }
+
+    /// Returns the binding by which the function can be accessed.
+    ///
+    /// This may be a binding for the function's identifier, or a binding for
+    /// the variable to which the function is assigned.
+    pub fn binding(&self) -> Option<AnyJsBinding> {
+        match self {
+            AnyJsFunction::JsFunctionDeclaration(declaration) => declaration.id().ok(),
+            AnyJsFunction::JsFunctionExportDefaultDeclaration(declaration) => declaration.id(),
+            AnyJsFunction::JsArrowFunctionExpression(_)
+            | AnyJsFunction::JsFunctionExpression(_) => {
+                let parent = self
+                    .parent::<JsInitializerClause>()?
+                    .parent::<JsVariableDeclarator>()?;
+                parent.id().ok()?.as_any_js_binding().cloned()
             }
         }
     }

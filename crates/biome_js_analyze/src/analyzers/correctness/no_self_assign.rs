@@ -1,3 +1,4 @@
+use biome_analyze::RuleSource;
 use biome_analyze::{context::RuleContext, declare_rule, Ast, Rule, RuleDiagnostic};
 use biome_console::markup;
 use biome_js_syntax::{
@@ -19,8 +20,6 @@ declare_rule! {
     /// Disallow assignments where both sides are exactly the same.
     ///
     /// Self assignments have no effect, so probably those are an error due to incomplete refactoring.
-    ///
-    /// Source: https://eslint.org/docs/latest/rules/no-self-assign
     ///
     /// ## Examples
     ///
@@ -54,7 +53,7 @@ declare_rule! {
     /// a['b'].foo = a['b'].foo;
     /// ```
     ///
-    /// ## Valid
+    /// ### Valid
     ///
     /// ```js
     /// a &= a;
@@ -67,6 +66,7 @@ declare_rule! {
     pub(crate) NoSelfAssign {
         version: "1.0.0",
         name: "noSelfAssign",
+        source: RuleSource::Eslint("no-self-assign"),
         recommended: true,
     }
 }
@@ -334,8 +334,6 @@ impl SameIdentifiers {
                             .ok()?;
                             return Some(AnyAssignmentLike::Identifiers(source_identifier));
                         }
-                    } else if identifier_like.is_literal() {
-                        return Some(AnyAssignmentLike::Identifiers(identifier_like));
                     } else {
                         return Self::next_static_expression(left, right);
                     }
@@ -747,10 +745,6 @@ impl IdentifiersLike {
             IdentifiersLike::References(_, right) => right.value_token().ok(),
             IdentifiersLike::Literal(_, right) => right.value_token().ok(),
         }
-    }
-
-    const fn is_literal(&self) -> bool {
-        matches!(self, IdentifiersLike::Literal(_, _))
     }
 }
 

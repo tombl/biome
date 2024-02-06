@@ -1,7 +1,8 @@
 use crate::JsonCommentStyle;
-use biome_formatter::{prelude::*, IndentWidth};
+use biome_formatter::{prelude::*, AttributePosition, IndentWidth};
 use biome_formatter::{
-    CstFormatContext, FormatContext, FormatOptions, IndentStyle, LineWidth, TransformSourceMap,
+    CstFormatContext, FormatContext, FormatOptions, IndentStyle, LineEnding, LineWidth,
+    TransformSourceMap,
 };
 
 use crate::comments::{FormatJsonLeadingComment, JsonComments};
@@ -58,7 +59,9 @@ impl CstFormatContext for JsonFormatContext {
 pub struct JsonFormatOptions {
     indent_style: IndentStyle,
     indent_width: IndentWidth,
+    line_ending: LineEnding,
     line_width: LineWidth,
+    attribute_position: AttributePosition,
     _file_source: JsonFileSource,
 }
 
@@ -68,7 +71,9 @@ impl JsonFormatOptions {
             _file_source: file_source,
             indent_style: IndentStyle::default(),
             indent_width: IndentWidth::default(),
+            line_ending: LineEnding::default(),
             line_width: LineWidth::default(),
+            attribute_position: AttributePosition::default(),
         }
     }
 
@@ -82,9 +87,30 @@ impl JsonFormatOptions {
         self
     }
 
+    pub fn with_line_ending(mut self, line_ending: LineEnding) -> Self {
+        self.line_ending = line_ending;
+        self
+    }
+
     pub fn with_line_width(mut self, line_width: LineWidth) -> Self {
         self.line_width = line_width;
         self
+    }
+
+    pub fn set_indent_style(&mut self, indent_style: IndentStyle) {
+        self.indent_style = indent_style;
+    }
+
+    pub fn set_indent_width(&mut self, indent_width: IndentWidth) {
+        self.indent_width = indent_width;
+    }
+
+    pub fn set_line_ending(&mut self, line_ending: LineEnding) {
+        self.line_ending = line_ending;
+    }
+
+    pub fn set_line_width(&mut self, line_width: LineWidth) {
+        self.line_width = line_width;
     }
 }
 
@@ -97,6 +123,10 @@ impl FormatOptions for JsonFormatOptions {
         self.indent_width
     }
 
+    fn line_ending(&self) -> LineEnding {
+        self.line_ending
+    }
+
     fn line_width(&self) -> LineWidth {
         self.line_width
     }
@@ -104,12 +134,17 @@ impl FormatOptions for JsonFormatOptions {
     fn as_print_options(&self) -> PrinterOptions {
         PrinterOptions::from(self)
     }
+
+    fn attribute_position(&self) -> AttributePosition {
+        self.attribute_position
+    }
 }
 
 impl fmt::Display for JsonFormatOptions {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "Indent style: {}", self.indent_style)?;
         writeln!(f, "Indent width: {}", self.indent_width.value())?;
-        writeln!(f, "Line width: {}", self.line_width.value())
+        writeln!(f, "Line ending: {}", self.line_ending)?;
+        writeln!(f, "Line width: {}", self.line_width.get())
     }
 }

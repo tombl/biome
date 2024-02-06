@@ -231,7 +231,7 @@ mod tests {
     };
     use crate::{analyze, AnalysisFilter, ControlFlow};
 
-    #[ignore]
+    // #[ignore]
     #[test]
     fn quick_test() {
         fn markup_to_string(markup: Markup) -> String {
@@ -243,12 +243,7 @@ mod tests {
             String::from_utf8(buffer).unwrap()
         }
 
-        const SOURCE: &str = r#"document
-	.querySelector(`[data-field-id="customModel-container"]`)
-	.querySelector('input').value = document
-	.querySelector(`[data-field-id="${modelField.id}-field"]`)
-	.querySelector('input').value;
-
+        const SOURCE: &str = r#"xdescribe('foo', () => {});
         "#;
         // const SOURCE: &str = r#"document.querySelector("foo").value = document.querySelector("foo").value
         //
@@ -263,7 +258,8 @@ mod tests {
             closure_index: Some(0),
             dependencies_index: Some(1),
         };
-        let rule_filter = RuleFilter::Rule("correctness", "noSelfAssign");
+        let rule_filter = RuleFilter::Rule("nursery", "noDisabledTests");
+
         options.configuration.rules.push_rule(
             RuleKey::new("nursery", "useHookAtTopLevel"),
             RuleOptions::new(HooksOptions { hooks: vec![hook] }),

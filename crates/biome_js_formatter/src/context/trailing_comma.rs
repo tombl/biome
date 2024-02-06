@@ -1,13 +1,9 @@
 use crate::prelude::*;
 use crate::{JsFormatContext, JsFormatOptions};
-use biome_deserialize::json::with_only_known_variants;
-use biome_deserialize::{DeserializationDiagnostic, VisitNode};
-use biome_formatter::formatter::Formatter;
+use biome_deserialize_macros::{Deserializable, Merge};
 use biome_formatter::prelude::{if_group_breaks, text};
 use biome_formatter::write;
 use biome_formatter::{Format, FormatResult};
-use biome_json_syntax::JsonLanguage;
-use biome_rowan::SyntaxNode;
 use std::fmt;
 use std::str::FromStr;
 
@@ -55,7 +51,7 @@ impl Format<JsFormatContext> for FormatTrailingComma {
 }
 
 /// Print trailing commas wherever possible in multi-line comma-separated syntactic structures.
-#[derive(Default, Debug, Eq, PartialEq, Hash, Clone, Copy)]
+#[derive(Clone, Copy, Default, Debug, Deserializable, Eq, Hash, Merge, PartialEq)]
 #[cfg_attr(
     feature = "serde",
     derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema),
@@ -72,8 +68,6 @@ pub enum TrailingComma {
 }
 
 impl TrailingComma {
-    pub(crate) const KNOWN_VALUES: &'static [&'static str] = &["all", "es5", "none"];
-
     pub const fn is_es5(&self) -> bool {
         matches!(self, TrailingComma::Es5)
     }
@@ -106,28 +100,5 @@ impl fmt::Display for TrailingComma {
             TrailingComma::All => std::write!(f, "All"),
             TrailingComma::None => std::write!(f, "None"),
         }
-    }
-}
-
-impl VisitNode<JsonLanguage> for TrailingComma {
-    fn visit_member_value(
-        &mut self,
-        node: &SyntaxNode<JsonLanguage>,
-        diagnostics: &mut Vec<DeserializationDiagnostic>,
-    ) -> Option<()> {
-        let node = with_only_known_variants(node, TrailingComma::KNOWN_VALUES, diagnostics)?;
-        match node.inner_string_text().ok()?.text() {
-            "all" => {
-                *self = TrailingComma::All;
-            }
-            "es5" => {
-                *self = TrailingComma::Es5;
-            }
-            "none" => {
-                *self = TrailingComma::None;
-            }
-            _ => {}
-        }
-        Some(())
     }
 }

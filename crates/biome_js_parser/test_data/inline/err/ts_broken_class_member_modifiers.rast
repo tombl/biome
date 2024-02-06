@@ -1,4 +1,5 @@
 JsModule {
+    bom_token: missing (optional),
     interpreter_token: missing (optional),
     directives: JsDirectiveList [],
     items: JsModuleItemList [
@@ -80,8 +81,9 @@ JsModule {
 
 0: JS_MODULE@0..59
   0: (empty)
-  1: JS_DIRECTIVE_LIST@0..0
-  2: JS_MODULE_ITEM_LIST@0..58
+  1: (empty)
+  2: JS_DIRECTIVE_LIST@0..0
+  3: JS_MODULE_ITEM_LIST@0..58
     0: JS_BOGUS_STATEMENT@0..24
       0: JS_DECORATOR_LIST@0..0
       1: CLASS_KW@0..6 "class" [] [Whitespace(" ")]
@@ -121,11 +123,11 @@ JsModule {
               0: JS_DECORATOR@57..58
                 0: AT@57..58 "@" [] []
                 1: (empty)
-  3: EOF@58..59 "" [Newline("\n")] []
+  4: EOF@58..59 "" [Newline("\n")] []
 --
 ts_broken_class_member_modifiers.ts:3:2 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  × expected an identifier, a string literal, a number literal, a private field name, or a computed name but instead found '}'
+  × Expected an identifier, a string literal, a number literal, a private field name, or a computed name but instead found '}'.
   
     1 │ class C {
     2 │ 	@decorator
@@ -134,7 +136,7 @@ ts_broken_class_member_modifiers.ts:3:2 parse ━━━━━━━━━━━�
     4 │ class CC {
     5 │ 	@
   
-  i Expected an identifier, a string literal, a number literal, a private field name, or a computed name here
+  i Expected an identifier, a string literal, a number literal, a private field name, or a computed name here.
   
     1 │ class C {
     2 │ 	@decorator
@@ -146,7 +148,7 @@ ts_broken_class_member_modifiers.ts:3:2 parse ━━━━━━━━━━━�
 --
 ts_broken_class_member_modifiers.ts:6:2 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  × expected an expression but instead found '}'
+  × Expected an expression but instead found '}'.
   
     4 │ class CC {
     5 │ 	@
@@ -155,7 +157,7 @@ ts_broken_class_member_modifiers.ts:6:2 parse ━━━━━━━━━━━�
     7 │ class @
     8 │ class C@
   
-  i Expected an expression here
+  i Expected an expression here.
   
     4 │ class CC {
     5 │ 	@
@@ -206,14 +208,14 @@ ts_broken_class_member_modifiers.ts:8:8 parse ━━━━━━━━━━━�
 --
 ts_broken_class_member_modifiers.ts:9:1 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  × expected an expression but instead found the end of the file
+  × Expected an expression but instead found the end of the file.
   
     7 │ class @
     8 │ class C@
   > 9 │ 
       │ 
   
-  i Expected an expression here
+  i Expected an expression here.
   
     7 │ class @
     8 │ class C@
@@ -234,14 +236,14 @@ ts_broken_class_member_modifiers.ts:8:1 parse ━━━━━━━━━━━�
 --
 ts_broken_class_member_modifiers.ts:9:1 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  × expected an identifier, a string literal, a number literal, a private field name, or a computed name but instead found the end of the file
+  × Expected an identifier, a string literal, a number literal, a private field name, or a computed name but instead found the end of the file.
   
     7 │ class @
     8 │ class C@
   > 9 │ 
       │ 
   
-  i Expected an identifier, a string literal, a number literal, a private field name, or a computed name here
+  i Expected an identifier, a string literal, a number literal, a private field name, or a computed name here.
   
     7 │ class @
     8 │ class C@

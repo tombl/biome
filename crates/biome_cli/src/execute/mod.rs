@@ -5,14 +5,15 @@ mod std_in;
 mod traverse;
 
 use crate::cli_options::CliOptions;
+use crate::execute::migrate::MigratePayload;
 use crate::execute::traverse::traverse;
 use crate::{CliDiagnostic, CliSession};
-use biome_diagnostics::{category, Category, MAXIMUM_DISPLAYABLE_DIAGNOSTICS};
+use biome_diagnostics::{category, Category};
 use biome_fs::RomePath;
 use biome_service::workspace::{FeatureName, FixFileMode};
 use std::ffi::OsString;
 use std::fmt::{Display, Formatter};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Useful information during the traversal of files and virtual content
 pub(crate) struct Execution {
@@ -36,6 +37,36 @@ impl Execution {
 }
 
 #[derive(Debug)]
+pub(crate) enum ExecutionEnvironment {
+    GitHub,
+}
+
+/// A type that holds the information to execute the CLI via `stdin
+#[derive(Debug)]
+pub(crate) struct Stdin(
+    /// The virtual path to the file
+    PathBuf,
+    /// The content of the file
+    String,
+);
+
+impl Stdin {
+    fn as_path(&self) -> &Path {
+        self.0.as_path()
+    }
+
+    fn as_content(&self) -> &str {
+        self.1.as_str()
+    }
+}
+
+impl From<(PathBuf, String)> for Stdin {
+    fn from((path, content): (PathBuf, String)) -> Self {
+        Self(path, content)
+    }
+}
+
+#[derive(Debug)]
 pub(crate) enum TraversalMode {
     /// This mode is enabled when running the command `biome check`
     Check {
@@ -47,7 +78,7 @@ pub(crate) enum TraversalMode {
         /// An optional tuple.
         /// 1. The virtual path to the file
         /// 2. The content of the file
-        stdin: Option<(PathBuf, String)>,
+        stdin: Option<Stdin>,
     },
     /// This mode is enabled when running the command `biome lint`
     Lint {
@@ -59,10 +90,13 @@ pub(crate) enum TraversalMode {
         /// An optional tuple.
         /// 1. The virtual path to the file
         /// 2. The content of the file
-        stdin: Option<(PathBuf, String)>,
+        stdin: Option<Stdin>,
     },
     /// This mode is enabled when running the command `biome ci`
-    CI,
+    CI {
+        /// Whether the CI is running in a specific environment, e.g. GitHub, GitLab, etc.
+        environment: Option<ExecutionEnvironment>,
+    },
     /// This mode is enabled when running the command `biome format`
     Format {
         /// It ignores parse errors
@@ -72,13 +106,18 @@ pub(crate) enum TraversalMode {
         /// An optional tuple.
         /// 1. The virtual path to the file
         /// 2. The content of the file
-        stdin: Option<(PathBuf, String)>,
+        stdin: Option<Stdin>,
     },
     /// This mode is enabled when running the command `biome migrate`
     Migrate {
+        /// Write result to disk
         write: bool,
+        /// The path directory where `biome.json` is placed
         configuration_file_path: PathBuf,
+        /// The path to `biome.json`
         configuration_directory_path: PathBuf,
+        /// Migrate from prettier
+        prettier: bool,
     },
 }
 
@@ -109,7 +148,27 @@ impl Execution {
         Self {
             report_mode: ReportMode::default(),
             traversal_mode: mode,
-            max_diagnostics: MAXIMUM_DISPLAYABLE_DIAGNOSTICS,
+            max_diagnostics: 20,
+        }
+    }
+
+    pub(crate) fn new_ci() -> Self {
+        // Ref: https://docs.github.com/actions/learn-github-actions/variables#default-environment-variables
+        let is_github = std::env::var("GITHUB_ACTIONS")
+            .ok()
+            .map(|value| value == "true")
+            .unwrap_or(false);
+
+        Self {
+            report_mode: ReportMode::default(),
+            traversal_mode: TraversalMode::CI {
+                environment: if is_github {
+                    Some(ExecutionEnvironment::GitHub)
+                } else {
+                    None
+                },
+            },
+            max_diagnostics: 20,
         }
     }
 
@@ -118,7 +177,7 @@ impl Execution {
         Self {
             traversal_mode,
             report_mode,
-            max_diagnostics: MAXIMUM_DISPLAYABLE_DIAGNOSTICS,
+            max_diagnostics: 20,
         }
     }
 
@@ -140,9 +199,9 @@ impl Execution {
         match &self.traversal_mode {
             TraversalMode::Check { fix_file_mode, .. }
             | TraversalMode::Lint { fix_file_mode, .. } => fix_file_mode.as_ref(),
-            TraversalMode::Format { .. } | TraversalMode::CI | TraversalMode::Migrate { .. } => {
-                None
-            }
+            TraversalMode::Format { .. }
+            | TraversalMode::CI { .. }
+            | TraversalMode::Migrate { .. } => None,
         }
     }
 
@@ -150,7 +209,7 @@ impl Execution {
         match self.traversal_mode {
             TraversalMode::Check { .. } => category!("check"),
             TraversalMode::Lint { .. } => category!("lint"),
-            TraversalMode::CI => category!("ci"),
+            TraversalMode::CI { .. } => category!("ci"),
             TraversalMode::Format { .. } => category!("format"),
             TraversalMode::Migrate { .. } => category!("migrate"),
         }
@@ -192,18 +251,26 @@ impl Execution {
         matches!(self.traversal_mode, TraversalMode::Format { .. })
     }
 
+    pub(crate) const fn is_format_write(&self) -> bool {
+        if let TraversalMode::Format { write, .. } = self.traversal_mode {
+            write
+        } else {
+            false
+        }
+    }
+
     /// Whether the traversal mode requires write access to files
     pub(crate) const fn requires_write_access(&self) -> bool {
         match self.traversal_mode {
             TraversalMode::Check { fix_file_mode, .. }
             | TraversalMode::Lint { fix_file_mode, .. } => fix_file_mode.is_some(),
-            TraversalMode::CI => false,
+            TraversalMode::CI { .. } => false,
             TraversalMode::Format { write, .. } => write,
             TraversalMode::Migrate { write: dry_run, .. } => dry_run,
         }
     }
 
-    pub(crate) fn as_stdin_file(&self) -> Option<&(PathBuf, String)> {
+    pub(crate) fn as_stdin_file(&self) -> Option<&Stdin> {
         match &self.traversal_mode {
             TraversalMode::Format { stdin, .. }
             | TraversalMode::Lint { stdin, .. }
@@ -221,32 +288,34 @@ pub(crate) fn execute_mode(
     cli_options: &CliOptions,
     paths: Vec<OsString>,
 ) -> Result<(), CliDiagnostic> {
-    if cli_options.max_diagnostics > MAXIMUM_DISPLAYABLE_DIAGNOSTICS {
-        return Err(CliDiagnostic::overflown_argument(
-            "--max-diagnostics",
-            MAXIMUM_DISPLAYABLE_DIAGNOSTICS,
-        ));
-    }
-
     mode.max_diagnostics = cli_options.max_diagnostics;
 
     // don't do any traversal if there's some content coming from stdin
-    if let Some((path, content)) = mode.as_stdin_file() {
-        let rome_path = RomePath::new(path);
-        std_in::run(session, &mode, rome_path, content.as_str())
+    if let Some(stdin) = mode.as_stdin_file() {
+        let rome_path = RomePath::new(stdin.as_path());
+        std_in::run(
+            session,
+            &mode,
+            rome_path,
+            stdin.as_content(),
+            cli_options.verbose,
+        )
     } else if let TraversalMode::Migrate {
         write,
         configuration_file_path,
         configuration_directory_path,
+        prettier,
     } = mode.traversal_mode
     {
-        migrate::run(
+        let payload = MigratePayload {
             session,
             write,
             configuration_file_path,
             configuration_directory_path,
-            cli_options.verbose,
-        )
+            verbose: cli_options.verbose,
+            prettier,
+        };
+        migrate::run(payload)
     } else {
         traverse(mode, session, cli_options, paths)
     }

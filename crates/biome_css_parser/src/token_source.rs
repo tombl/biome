@@ -5,7 +5,7 @@ use biome_css_syntax::{CssSyntaxKind, TextRange};
 use biome_parser::diagnostic::ParseDiagnostic;
 use biome_parser::lexer::{BufferedLexer, LexContext};
 use biome_parser::prelude::{BumpWithContext, NthToken, TokenSource};
-use biome_parser::token_source::Trivia;
+use biome_parser::token_source::{TokenSourceCheckpoint, Trivia};
 use biome_rowan::TriviaPieceKind;
 use std::collections::VecDeque;
 
@@ -26,7 +26,6 @@ pub(crate) struct CssTokenSource<'src> {
 
     /// Offset of the last cached lookahead token from the current [BufferedLexer] token.
     lookahead_offset: usize,
-    config: CssParserOptions,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -34,6 +33,8 @@ struct Lookahead {
     kind: CssSyntaxKind,
     after_newline: bool,
 }
+
+pub(crate) type CssTokenSourceCheckpoint = TokenSourceCheckpoint<CssSyntaxKind>;
 
 impl<'src> CssTokenSource<'src> {
     /// Creates a new token source.
@@ -43,20 +44,15 @@ impl<'src> CssTokenSource<'src> {
             trivia_list: vec![],
             lookahead_offset: 0,
             non_trivia_lookahead: VecDeque::new(),
-            config: CssParserOptions::default(),
         }
-    }
-
-    pub(crate) fn with_config(self, config: CssParserOptions) -> Self {
-        Self { config, ..self }
     }
 
     /// Creates a new token source for the given string
     pub fn from_str(source: &'src str, config: CssParserOptions) -> Self {
-        let lexer = CssLexer::from_str(source);
+        let lexer = CssLexer::from_str(source).with_config(config);
 
         let buffered = BufferedLexer::new(lexer);
-        let mut source = CssTokenSource::new(buffered).with_config(config);
+        let mut source = CssTokenSource::new(buffered);
 
         source.next_non_trivia_token(CssLexContext::default(), true);
         source
@@ -77,13 +73,6 @@ impl<'src> CssTokenSource<'src> {
 
             match trivia_kind {
                 Err(_) => {
-                    // Not trivia
-                    break;
-                }
-                Ok(trivia_kind)
-                    if trivia_kind.is_single_line_comment()
-                        && !self.config.allow_single_line_comments =>
-                {
                     // Not trivia
                     break;
                 }
@@ -151,6 +140,23 @@ impl<'src> CssTokenSource<'src> {
         }
 
         None
+    }
+
+    /// Creates a checkpoint to which it can later return using [Self::rewind].
+    pub fn checkpoint(&self) -> CssTokenSourceCheckpoint {
+        CssTokenSourceCheckpoint {
+            trivia_len: self.trivia_list.len() as u32,
+            lexer_checkpoint: self.lexer.checkpoint(),
+        }
+    }
+
+    /// Restores the token source to a previous state
+    pub fn rewind(&mut self, checkpoint: CssTokenSourceCheckpoint) {
+        assert!(self.trivia_list.len() >= checkpoint.trivia_len as usize);
+        self.trivia_list.truncate(checkpoint.trivia_len as usize);
+        self.lexer.rewind(checkpoint.lexer_checkpoint);
+        self.non_trivia_lookahead.clear();
+        self.lookahead_offset = 0;
     }
 }
 

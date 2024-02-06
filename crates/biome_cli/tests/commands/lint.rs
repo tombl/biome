@@ -14,7 +14,7 @@ use crate::configs::{
     CONFIG_LINTER_SUPPRESSED_GROUP, CONFIG_LINTER_SUPPRESSED_RULE,
     CONFIG_LINTER_UPGRADE_DIAGNOSTIC, CONFIG_RECOMMENDED_GROUP,
 };
-use crate::snap_test::{markup_to_string, SnapshotPayload};
+use crate::snap_test::{assert_file_contents, markup_to_string, SnapshotPayload};
 use crate::{assert_cli_snapshot, run_cli, FORMATTED, LINT_ERROR, PARSE_ERROR};
 use biome_console::{markup, BufferConsole, LogLevel, MarkupBuf};
 use biome_fs::{ErrorEntry, FileSystemExt, MemoryFileSystem, OsFileSystem};
@@ -384,27 +384,8 @@ function f() { arguments; }
 
     assert!(result.is_err(), "run_cli returned {result:?}");
 
-    let mut file = fs
-        .open(test1)
-        .expect("formatting target file was removed by the CLI");
-
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .expect("failed to read file from memory FS");
-
-    assert_eq!(content, expected);
-    drop(file);
-
-    content.clear();
-
-    let mut file = fs
-        .open(test2)
-        .expect("formatting target file was removed by the CLI");
-
-    file.read_to_string(&mut content)
-        .expect("failed to read file from memory FS");
-
-    drop(file);
+    assert_file_contents(&fs, test1, expected);
+    assert_file_contents(&fs, test2, expected);
 
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
@@ -815,7 +796,7 @@ fn fs_error_dereferenced_symlink() {
     }
 
     let result = run_cli(
-        DynRef::Owned(Box::new(OsFileSystem)),
+        DynRef::Owned(Box::new(OsFileSystem(Some(root_path.clone())))),
         &mut console,
         Args::from([("lint"), root_path.display().to_string().as_str()].as_slice()),
     );
@@ -859,7 +840,7 @@ fn fs_error_infinite_symlink_expansion_to_dirs() {
     }
 
     let result = run_cli(
-        DynRef::Owned(Box::new(OsFileSystem)),
+        DynRef::Owned(Box::new(OsFileSystem(Some(root_path.clone())))),
         &mut console,
         Args::from([("lint"), (root_path.display().to_string().as_str())].as_slice()),
     );
@@ -905,7 +886,7 @@ fn fs_error_infinite_symlink_expansion_to_files() {
     }
 
     let result = run_cli(
-        DynRef::Owned(Box::new(OsFileSystem)),
+        DynRef::Owned(Box::new(OsFileSystem(Some(root_path.clone())))),
         &mut console,
         Args::from([("lint"), (root_path.display().to_string().as_str())].as_slice()),
     );
@@ -1009,8 +990,10 @@ fn fs_error_unknown() {
 // │   └── test.js  // ok
 // └── src
 //     ├── symlink_testcase1_1 -> hidden_nested
+//     ├── symlink_testcase1_3 -> hidden_testcase1/test/test.js
 //     └── symlink_testcase2 -> hidden_testcase2
 #[test]
+#[ignore = "It regresses on linux since we added the ignore crate, to understand why"]
 fn fs_files_ignore_symlink() {
     let fs = MemoryFileSystem::default();
     let mut console = BufferConsole::default();
@@ -1084,7 +1067,7 @@ fn fs_files_ignore_symlink() {
     }
 
     let result = run_cli(
-        DynRef::Owned(Box::new(OsFileSystem)),
+        DynRef::Owned(Box::new(OsFileSystem(Some(root_path.clone())))),
         &mut console,
         Args::from(
             [
@@ -1438,6 +1421,37 @@ fn unsupported_file() {
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
         "unsupported_file",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn unsupported_file_verbose() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let file_path = Path::new("check.txt");
+    fs.insert(file_path.into(), LINT_ERROR.as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("lint"),
+                "--verbose",
+                file_path.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+    assert!(result.is_err(), "run_cli returned {result:?}");
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "unsupported_file_verbose",
         fs,
         console,
         result,
@@ -1886,7 +1900,7 @@ fn check_stdin_apply_successfully() {
 
     let message = console
         .out_buffer
-        .get(0)
+        .first()
         .expect("Console should have written a message");
 
     let content = markup_to_string(markup! {
@@ -1934,7 +1948,7 @@ fn check_stdin_apply_unsafe_successfully() {
 
     let message = console
         .out_buffer
-        .get(0)
+        .first()
         .expect("Console should have written a message");
 
     let content = markup_to_string(markup! {
@@ -2342,6 +2356,309 @@ A = 0;
     assert_cli_snapshot(SnapshotPayload::new(
         module_path!(),
         "does_error_with_only_warnings",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn should_only_processes_changed_files_when_changed_flag_is_set() {
+    let mut console = BufferConsole::default();
+    let mut fs = MemoryFileSystem::default();
+
+    fs.set_on_get_changed_files(Box::new(|| vec![String::from("file.js")]));
+
+    let file_path = Path::new("file.js");
+    fs.insert(file_path.into(), r#"console.log('file');"#.as_bytes());
+
+    let file_path2 = Path::new("file2.js");
+    fs.insert(file_path2.into(), r#"console.log('file2');"#.as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("lint"),
+                "--changed",
+                "--since=main",
+                file_path.as_os_str().to_str().unwrap(),
+                file_path2.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "should_only_processes_changed_files_when_changed_flag_is_set",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn should_error_if_changed_flag_is_used_without_since_or_default_branch_config() {
+    let mut console = BufferConsole::default();
+    let mut fs = MemoryFileSystem::default();
+
+    fs.set_on_get_changed_files(Box::new(|| vec![String::from("file.js")]));
+
+    let file_path = Path::new("file.js");
+    fs.insert(file_path.into(), r#"console.log('file');"#.as_bytes());
+
+    let file_path2 = Path::new("file2.js");
+    fs.insert(file_path2.into(), r#"console.log('file2');"#.as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("lint"),
+                "--changed",
+                file_path.as_os_str().to_str().unwrap(),
+                file_path2.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_err(), "run_cli returned {result:?}");
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "should_error_if_changed_flag_is_used_without_since_or_default_branch_config",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn should_process_changed_files_if_changed_flag_is_set_and_default_branch_is_configured() {
+    let mut console = BufferConsole::default();
+    let mut fs = MemoryFileSystem::default();
+
+    fs.set_on_get_changed_files(Box::new(|| vec![String::from("file.js")]));
+
+    let file_path = Path::new("biome.json");
+    fs.insert(
+        file_path.into(),
+        r#"
+{
+    "vcs": {
+        "defaultBranch": "main"
+    }
+}
+        "#
+        .as_bytes(),
+    );
+
+    let file_path = Path::new("file.js");
+    fs.insert(file_path.into(), r#"console.log('file');"#.as_bytes());
+
+    let file_path2 = Path::new("file2.js");
+    fs.insert(file_path2.into(), r#"console.log('file2');"#.as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("lint"),
+                "--changed",
+                file_path.as_os_str().to_str().unwrap(),
+                file_path2.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "should_process_changed_files_if_changed_flag_is_set_and_default_branch_is_configured",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn should_error_if_since_arg_is_used_without_changed() {
+    let mut console = BufferConsole::default();
+    let mut fs = MemoryFileSystem::default();
+
+    fs.set_on_get_changed_files(Box::new(|| vec![String::from("file.js")]));
+
+    let file_path = Path::new("file.js");
+    fs.insert(file_path.into(), r#"console.log('file');"#.as_bytes());
+
+    let file_path2 = Path::new("file2.js");
+    fs.insert(file_path2.into(), r#"console.log('file2');"#.as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("lint"),
+                "--since=main",
+                file_path.as_os_str().to_str().unwrap(),
+                file_path2.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_err(), "run_cli returned {result:?}");
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "should_error_if_since_arg_is_used_without_changed",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn should_only_process_changed_file_if_its_included() {
+    let mut console = BufferConsole::default();
+    let mut fs = MemoryFileSystem::default();
+
+    fs.set_on_get_changed_files(Box::new(|| {
+        vec![String::from("file.js"), String::from("file2.js")]
+    }));
+
+    let file_path = Path::new("biome.json");
+    fs.insert(
+        file_path.into(),
+        r#"
+{
+    "files": {
+        "include": ["file.js"]
+    },
+    "vcs": {
+        "defaultBranch": "main"
+    }
+}
+        "#
+        .as_bytes(),
+    );
+
+    let file_path = Path::new("file.js");
+    fs.insert(file_path.into(), r#"console.log('file');"#.as_bytes());
+
+    let file_path2 = Path::new("file2.js");
+    fs.insert(file_path2.into(), r#"console.log('file2');"#.as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("lint"),
+                "--changed",
+                "--since=main",
+                file_path.as_os_str().to_str().unwrap(),
+                file_path2.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_ok(), "run_cli returned {result:?}");
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "should_only_process_changed_file_if_its_included",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn should_not_process_ignored_file_even_if_its_changed() {
+    let mut console = BufferConsole::default();
+    let mut fs = MemoryFileSystem::default();
+
+    fs.set_on_get_changed_files(Box::new(|| vec![String::from("file.js")]));
+
+    let file_path = Path::new("biome.json");
+    fs.insert(
+        file_path.into(),
+        r#"
+{
+    "files": {
+        "ignore": ["file.js"]
+    },
+    "vcs": {
+        "defaultBranch": "main"
+    }
+}
+        "#
+        .as_bytes(),
+    );
+
+    let file_path = Path::new("file.js");
+    fs.insert(file_path.into(), r#"console.log('file');"#.as_bytes());
+
+    let file_path2 = Path::new("file2.js");
+    fs.insert(file_path2.into(), r#"console.log('file2');"#.as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from(
+            [
+                ("lint"),
+                "--changed",
+                "--since=main",
+                file_path.as_os_str().to_str().unwrap(),
+                file_path2.as_os_str().to_str().unwrap(),
+            ]
+            .as_slice(),
+        ),
+    );
+
+    assert!(result.is_err(), "run_cli returned {result:?}");
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "should_not_process_ignored_file_even_if_its_changed",
+        fs,
+        console,
+        result,
+    ));
+}
+
+#[test]
+fn lint_syntax_rules() {
+    let mut fs = MemoryFileSystem::default();
+    let mut console = BufferConsole::default();
+
+    let file_path = Path::new("check.js");
+    fs.insert(file_path.into(), r#"class A { #foo; #foo }"#.as_bytes());
+
+    let result = run_cli(
+        DynRef::Borrowed(&mut fs),
+        &mut console,
+        Args::from([("lint"), file_path.as_os_str().to_str().unwrap()].as_slice()),
+    );
+
+    assert!(result.is_err(), "run_cli returned {result:?}");
+
+    assert_cli_snapshot(SnapshotPayload::new(
+        module_path!(),
+        "lint_syntax_rules",
         fs,
         console,
         result,

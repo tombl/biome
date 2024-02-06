@@ -6,12 +6,14 @@ use crate::utils;
 use anyhow::Result;
 use biome_analyze::RuleCategories;
 use biome_console::markup;
-use biome_fs::{FileSystem, OsFileSystem, RomePath};
+use biome_diagnostics::PrintDescription;
+use biome_fs::{FileSystem, RomePath};
+use biome_service::configuration::{load_configuration, LoadedConfiguration};
 use biome_service::workspace::{
     FeatureName, FeaturesBuilder, PullDiagnosticsParams, SupportsFeatureParams,
 };
 use biome_service::workspace::{RageEntry, RageParams, RageResult, UpdateSettingsParams};
-use biome_service::{load_config, ConfigurationBasePath, Workspace};
+use biome_service::{ConfigurationBasePath, Workspace};
 use biome_service::{DynRef, WorkspaceError};
 use futures::stream::futures_unordered::FuturesUnordered;
 use futures::StreamExt;
@@ -25,10 +27,10 @@ use std::sync::RwLock;
 use tokio::sync::Notify;
 use tokio::sync::OnceCell;
 use tower_lsp::lsp_types;
-use tower_lsp::lsp_types::Registration;
 use tower_lsp::lsp_types::Unregistration;
 use tower_lsp::lsp_types::Url;
-use tracing::{error, info, warn};
+use tower_lsp::lsp_types::{MessageType, Registration};
+use tracing::{debug, error, info};
 
 pub(crate) struct ClientInformation {
     /// The name of the client
@@ -65,6 +67,8 @@ pub(crate) struct Session {
     documents: RwLock<FxHashMap<lsp_types::Url, Document>>,
 
     pub(crate) cancellation: Arc<Notify>,
+
+    pub(crate) config_path: Option<PathBuf>,
 }
 
 /// The parameters provided by the client in the "initialize" request
@@ -132,6 +136,7 @@ impl Session {
         client: tower_lsp::Client,
         workspace: Arc<dyn Workspace>,
         cancellation: Arc<Notify>,
+        fs: DynRef<'static, dyn FileSystem>,
     ) -> Self {
         let documents = Default::default();
         let config = RwLock::new(ExtensionSettings::new());
@@ -143,9 +148,14 @@ impl Session {
             configuration_status: AtomicU8::new(ConfigurationStatus::Missing as u8),
             documents,
             extension_settings: config,
-            fs: DynRef::Owned(Box::new(OsFileSystem)),
+            fs,
             cancellation,
+            config_path: None,
         }
+    }
+
+    pub(crate) fn set_config_path(&mut self, path: PathBuf) {
+        self.config_path = Some(path);
     }
 
     /// Initialize this session instance with the incoming initialization parameters from the client
@@ -267,7 +277,7 @@ impl Session {
     /// Computes diagnostics for the file matching the provided url and publishes
     /// them to the client. Called from [`handlers::text_document`] when a file's
     /// contents changes.
-    #[tracing::instrument(level = "debug", skip_all, fields(url = display(&url), diagnostic_count), err)]
+    #[tracing::instrument(level = "trace", skip_all, fields(url = display(&url), diagnostic_count), err)]
     pub(crate) async fn update_diagnostics(&self, url: lsp_types::Url) -> Result<()> {
         let rome_path = self.file_path(&url)?;
         let doc = self.document(&url)?;
@@ -380,46 +390,72 @@ impl Session {
         }
     }
 
-    /// Returns a reference to the client informations for this session
+    /// Returns a reference to the client information for this session
     pub(crate) fn client_information(&self) -> Option<&ClientInformation> {
         self.initialize_params.get()?.client_information.as_ref()
     }
 
     /// This function attempts to read the `biome.json` configuration file from
     /// the root URI and update the workspace settings accordingly
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "trace", skip(self))]
     pub(crate) async fn load_workspace_settings(&self) {
-        let base_path = match self.base_path() {
-            None => ConfigurationBasePath::default(),
-            Some(path) => ConfigurationBasePath::Lsp(path),
+        let base_path = if let Some(config_path) = &self.config_path {
+            ConfigurationBasePath::FromUser(config_path.clone())
+        } else {
+            match self.base_path() {
+                None => ConfigurationBasePath::default(),
+                Some(path) => ConfigurationBasePath::Lsp(path),
+            }
         };
 
-        let status = match load_config(&self.fs, base_path) {
-            Ok(Some(payload)) => {
-                let (configuration, diagnostics) = payload.deserialized.consume();
-                if !diagnostics.is_empty() {
-                    warn!("The deserialization of the configuration resulted in errors. Biome will use its defaults where possible.");
-                }
-
-                info!("Loaded workspace settings: {configuration:#?}");
-
-                let result = self
-                    .workspace
-                    .update_settings(UpdateSettingsParams { configuration });
-
-                if let Err(error) = result {
-                    error!("Failed to set workspace settings: {}", error);
+        let status = match load_configuration(&self.fs, base_path) {
+            Ok(loaded_configuration) => {
+                if loaded_configuration.has_errors() {
+                    error!("Couldn't load the configuration file, reasons:");
+                    for diagnostic in loaded_configuration.as_diagnostics_iter() {
+                        let message = PrintDescription(diagnostic).to_string();
+                        self.client.log_message(MessageType::ERROR, message).await;
+                    }
                     ConfigurationStatus::Error
                 } else {
-                    ConfigurationStatus::Loaded
+                    let LoadedConfiguration {
+                        configuration,
+                        directory_path: configuration_path,
+                        ..
+                    } = loaded_configuration;
+                    info!("Loaded workspace setting");
+                    debug!("{configuration:#?}");
+                    let fs = &self.fs;
+
+                    let result =
+                        configuration.retrieve_gitignore_matches(fs, configuration_path.as_deref());
+
+                    match result {
+                        Ok((vcs_base_path, gitignore_matches)) => {
+                            let result = self.workspace.update_settings(UpdateSettingsParams {
+                                working_directory: fs.working_directory(),
+                                configuration,
+                                vcs_base_path,
+                                gitignore_matches,
+                            });
+
+                            if let Err(error) = result {
+                                error!("Failed to set workspace settings: {}", error);
+                                ConfigurationStatus::Error
+                            } else {
+                                ConfigurationStatus::Loaded
+                            }
+                        }
+                        Err(err) => {
+                            error!("Couldn't load the configuration file, reason:\n {}", err);
+                            ConfigurationStatus::Error
+                        }
+                    }
                 }
             }
-            Ok(None) => {
-                // Ignore, load_config already logs an error in this case
-                ConfigurationStatus::Missing
-            }
+
             Err(err) => {
-                error!("Couldn't load the workspace settings, reason:\n {}", err);
+                error!("Couldn't load the configuration file, reason:\n {}", err);
                 ConfigurationStatus::Error
             }
         };
@@ -428,7 +464,7 @@ impl Session {
     }
 
     /// Requests "workspace/configuration" from client and updates Session config
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "trace", skip(self))]
     pub(crate) async fn load_extension_settings(&self) {
         let item = lsp_types::ConfigurationItem {
             scope_uri: None,

@@ -1,23 +1,31 @@
-use self::{javascript::JsFileHandler, json::JsonFileHandler, unknown::UnknownFileHandler};
+use self::{
+    css::CssFileHandler, javascript::JsFileHandler, json::JsonFileHandler,
+    unknown::UnknownFileHandler,
+};
+use crate::file_handlers::astro::AstroFileHandler;
+pub use crate::file_handlers::astro::ASTRO_FENCE;
 use crate::workspace::{FixFileMode, OrganizeImportsResult};
 use crate::{
     settings::SettingsHandle,
     workspace::{FixFileResult, GetSyntaxTreeResult, PullActionsResult, RenameResult},
     Rules, WorkspaceError,
 };
-use biome_analyze::{AnalysisFilter, AnalyzerDiagnostic};
+use biome_analyze::{AnalysisFilter, AnalyzerDiagnostic, RuleCategories};
 use biome_console::fmt::Formatter;
 use biome_console::markup;
+use biome_css_formatter::can_format_css_yet;
 use biome_diagnostics::{Diagnostic, Severity};
 use biome_formatter::Printed;
 use biome_fs::RomePath;
-use biome_js_syntax::{TextRange, TextSize};
+use biome_js_syntax::{JsFileSource, TextRange, TextSize};
 use biome_parser::AnyParse;
 use biome_rowan::NodeCache;
 pub use javascript::JsFormatterSettings;
 use std::ffi::OsStr;
 use std::path::Path;
 
+mod astro;
+mod css;
 mod javascript;
 mod json;
 mod unknown;
@@ -38,29 +46,30 @@ pub enum Language {
     Json,
     /// JSONC
     Jsonc,
+    /// CSS
+    Css,
+    ///
+    Astro,
     /// Any language that is not supported
     #[default]
     Unknown,
 }
 
 impl Language {
-    /// Files that can be bypassed, because correctly handled by the JSON parser
-    pub(crate) const ALLOWED_FILES: &'static [&'static str; 15] = &[
-        "typescript.json",
-        "tsconfig.json",
-        "jsconfig.json",
-        "tslint.json",
-        "babel.config.json",
+    /// Sorted array of files that are known as JSONC (JSON with comments).
+    pub(crate) const KNOWN_FILES_AS_JSONC: &'static [&'static str; 12] = &[
+        ".babelrc",
         ".babelrc.json",
         ".ember-cli",
-        "typedoc.json",
-        ".eslintrc.json",
         ".eslintrc",
+        ".eslintrc.json",
+        ".hintrc",
         ".jsfmtrc",
         ".jshintrc",
         ".swcrc",
-        ".hintrc",
-        ".babelrc",
+        "babel.config.json",
+        "tslint.json",
+        "typedoc.json",
     ];
 
     /// Returns the language corresponding to this file extension
@@ -72,12 +81,17 @@ impl Language {
             "tsx" => Language::TypeScriptReact,
             "json" => Language::Json,
             "jsonc" => Language::Jsonc,
+            "astro" => Language::Astro,
+            "css" => Language::Css,
             _ => Language::Unknown,
         }
     }
 
     pub fn from_known_filename(s: &str) -> Self {
-        if Self::ALLOWED_FILES.contains(&s.to_lowercase().as_str()) {
+        if Self::KNOWN_FILES_AS_JSONC
+            .binary_search(&s.to_lowercase().as_str())
+            .is_ok()
+        {
             Language::Jsonc
         } else {
             Language::Unknown
@@ -90,6 +104,19 @@ impl Language {
             .and_then(|path| path.to_str())
             .map(Language::from_extension)
             .unwrap_or(Language::Unknown)
+    }
+
+    /// Returns the language corresponding to the file path
+    /// relying on the file extension and the known files.
+    pub fn from_path_and_known_filename(path: &Path) -> Self {
+        path.extension()
+            .and_then(OsStr::to_str)
+            .map(Language::from_extension)
+            .or(path
+                .file_name()
+                .and_then(OsStr::to_str)
+                .map(Language::from_known_filename))
+            .unwrap_or_default()
     }
 
     /// Returns the language corresponding to this language ID
@@ -106,6 +133,9 @@ impl Language {
             "typescriptreact" => Language::TypeScriptReact,
             "json" => Language::Json,
             "jsonc" => Language::Jsonc,
+            "astro" => Language::Astro,
+            // TODO: remove this when we are ready to handle CSS files
+            "css" => Language::Unknown,
             _ => Language::Unknown,
         }
     }
@@ -153,6 +183,36 @@ impl Language {
     pub const fn is_json_like(&self) -> bool {
         matches!(self, Language::Json | Language::Jsonc)
     }
+
+    pub const fn is_css_like(&self) -> bool {
+        matches!(self, Language::Css)
+    }
+
+    pub fn as_js_file_source(&self) -> Option<JsFileSource> {
+        match self {
+            Language::JavaScript => Some(JsFileSource::js_module()),
+            Language::JavaScriptReact => Some(JsFileSource::jsx()),
+            Language::TypeScript => Some(JsFileSource::tsx()),
+            Language::TypeScriptReact => Some(JsFileSource::tsx()),
+            Language::Astro => Some(JsFileSource::ts()),
+            Language::Json | Language::Jsonc | Language::Css | Language::Unknown => None,
+        }
+    }
+
+    pub fn can_parse(path: &Path, content: &str) -> bool {
+        let language = Language::from_path(path);
+        match language {
+            Language::JavaScript
+            | Language::JavaScriptReact
+            | Language::TypeScript
+            | Language::TypeScriptReact
+            | Language::Json
+            | Language::Css
+            | Language::Jsonc => true,
+            Language::Astro => ASTRO_FENCE.is_match(content),
+            Language::Unknown => false,
+        }
+    }
 }
 
 impl biome_console::fmt::Display for Language {
@@ -164,6 +224,8 @@ impl biome_console::fmt::Display for Language {
             Language::TypeScriptReact => fmt.write_markup(markup! { "TSX" }),
             Language::Json => fmt.write_markup(markup! { "JSON" }),
             Language::Jsonc => fmt.write_markup(markup! { "JSONC" }),
+            Language::Css => fmt.write_markup(markup! { "CSS" }),
+            Language::Astro => fmt.write_markup(markup! { "Astro" }),
             Language::Unknown => fmt.write_markup(markup! { "Unknown" }),
         }
     }
@@ -239,11 +301,11 @@ pub struct DebugCapabilities {
 
 pub(crate) struct LintParams<'a> {
     pub(crate) parse: AnyParse,
-    pub(crate) filter: AnalysisFilter<'a>,
-    pub(crate) rules: Option<&'a Rules>,
     pub(crate) settings: SettingsHandle<'a>,
+    pub(crate) language: Language,
     pub(crate) max_diagnostics: u64,
     pub(crate) path: &'a RomePath,
+    pub(crate) categories: RuleCategories,
 }
 
 pub(crate) struct LintResults {
@@ -320,6 +382,9 @@ pub(crate) trait ExtensionHandler {
 pub(crate) struct Features {
     js: JsFileHandler,
     json: JsonFileHandler,
+    #[allow(unused)]
+    css: CssFileHandler,
+    astro: AstroFileHandler,
     unknown: UnknownFileHandler,
 }
 
@@ -328,21 +393,10 @@ impl Features {
         Features {
             js: JsFileHandler {},
             json: JsonFileHandler {},
+            css: CssFileHandler {},
+            astro: AstroFileHandler {},
             unknown: UnknownFileHandler::default(),
         }
-    }
-
-    /// Return a [Language] from a string
-    pub(crate) fn get_language(rome_path: &RomePath) -> Language {
-        rome_path
-            .extension()
-            .and_then(OsStr::to_str)
-            .map(Language::from_extension)
-            .or(rome_path
-                .file_name()
-                .and_then(OsStr::to_str)
-                .map(Language::from_known_filename))
-            .unwrap_or_default()
     }
 
     /// Returns the [Capabilities] associated with a [RomePath]
@@ -351,12 +405,21 @@ impl Features {
         rome_path: &RomePath,
         language_hint: Language,
     ) -> Capabilities {
-        match Self::get_language(rome_path).or(language_hint) {
+        match Language::from_path_and_known_filename(rome_path).or(language_hint) {
             Language::JavaScript
             | Language::JavaScriptReact
             | Language::TypeScript
             | Language::TypeScriptReact => self.js.capabilities(),
             Language::Json | Language::Jsonc => self.json.capabilities(),
+            Language::Css => {
+                // TODO: change this when we are ready to handle CSS files
+                if can_format_css_yet() {
+                    self.css.capabilities()
+                } else {
+                    self.unknown.capabilities()
+                }
+            }
+            Language::Astro => self.astro.capabilities(),
             Language::Unknown => self.unknown.capabilities(),
         }
     }
@@ -380,4 +443,11 @@ pub(crate) fn is_diagnostic_error(
         .unwrap_or_else(|| diagnostic.severity());
 
     severity >= Severity::Error
+}
+
+#[test]
+fn test_order() {
+    for items in Language::KNOWN_FILES_AS_JSONC.windows(2) {
+        assert!(items[0] < items[1], "{} < {}", items[0], items[1]);
+    }
 }

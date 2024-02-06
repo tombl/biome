@@ -14,19 +14,27 @@ export interface SupportsFeatureResult {
 export type SupportKind =
 	| "Supported"
 	| "Ignored"
+	| "Protected"
 	| "FeatureNotEnabled"
 	| "FileNotSupported";
 export interface UpdateSettingsParams {
-	configuration: Configuration;
+	configuration: PartialConfiguration;
+	gitignore_matches: string[];
+	vcs_base_path?: string;
+	working_directory?: string;
 }
 /**
  * The configuration that is contained inside the file `biome.json`
  */
-export interface Configuration {
+export interface PartialConfiguration {
 	/**
 	 * A field for the [JSON schema](https://json-schema.org/) specification
 	 */
 	$schema?: string;
+	/**
+	 * Specific configuration for the Css language
+	 */
+	css?: PartialCssConfiguration;
 	/**
 	 * A list of paths to other JSON files, used to extends the current configuration.
 	 */
@@ -34,27 +42,27 @@ export interface Configuration {
 	/**
 	 * The configuration of the filesystem
 	 */
-	files?: FilesConfiguration;
+	files?: PartialFilesConfiguration;
 	/**
 	 * The configuration of the formatter
 	 */
-	formatter?: FormatterConfiguration;
+	formatter?: PartialFormatterConfiguration;
 	/**
 	 * Specific configuration for the JavaScript language
 	 */
-	javascript?: JavascriptConfiguration;
+	javascript?: PartialJavascriptConfiguration;
 	/**
 	 * Specific configuration for the Json language
 	 */
-	json?: JsonConfiguration;
+	json?: PartialJsonConfiguration;
 	/**
 	 * The configuration for the linter
 	 */
-	linter?: LinterConfiguration;
+	linter?: PartialLinterConfiguration;
 	/**
 	 * The configuration of the import sorting
 	 */
-	organizeImports?: OrganizeImports;
+	organizeImports?: PartialOrganizeImports;
 	/**
 	 * A list of granular patterns that should be applied only to a sub set of files
 	 */
@@ -62,13 +70,26 @@ export interface Configuration {
 	/**
 	 * The configuration of the VCS integration
 	 */
-	vcs?: VcsConfiguration;
+	vcs?: PartialVcsConfiguration;
+}
+/**
+ * Options applied to CSS files
+ */
+export interface PartialCssConfiguration {
+	/**
+	 * Formatting options
+	 */
+	formatter?: PartialCssFormatter;
+	/**
+	 * Parsing options
+	 */
+	parser?: PartialCssParser;
 }
 export type StringSet = string[];
 /**
  * The configuration of the filesystem
  */
-export interface FilesConfiguration {
+export interface PartialFilesConfiguration {
 	/**
 	 * A list of Unix shell style patterns. Biome will ignore files/folders that will match these patterns.
 	 */
@@ -89,7 +110,11 @@ export interface FilesConfiguration {
 /**
  * Generic options applied to all files
  */
-export interface FormatterConfiguration {
+export interface PartialFormatterConfiguration {
+	/**
+	 * The attribute position style. By default auto.
+	 */
+	attributePosition?: AttributePosition;
 	enabled?: boolean;
 	/**
 	 * Stores whether formatting should be allowed to proceed if a given file has syntax errors
@@ -116,6 +141,10 @@ export interface FormatterConfiguration {
 	 */
 	indentWidth?: number;
 	/**
+	 * The type of line ending.
+	 */
+	lineEnding?: LineEnding;
+	/**
 	 * What's the max width of a line. Defaults to 80.
 	 */
 	lineWidth?: LineWidth;
@@ -123,37 +152,37 @@ export interface FormatterConfiguration {
 /**
  * A set of options applied to the JavaScript files
  */
-export interface JavascriptConfiguration {
+export interface PartialJavascriptConfiguration {
 	/**
 	 * Formatting options
 	 */
-	formatter?: JavascriptFormatter;
+	formatter?: PartialJavascriptFormatter;
 	/**
 	* A list of global bindings that should be ignored by the analyzers
 
 If defined here, they should not emit diagnostics. 
 	 */
 	globals?: StringSet;
-	organize_imports?: JavascriptOrganizeImports;
+	organize_imports?: PartialJavascriptOrganizeImports;
 	/**
 	 * Parsing options
 	 */
-	parser?: JavascriptParser;
+	parser?: PartialJavascriptParser;
 }
 /**
  * Options applied to JSON files
  */
-export interface JsonConfiguration {
+export interface PartialJsonConfiguration {
 	/**
 	 * Formatting options
 	 */
-	formatter?: JsonFormatter;
+	formatter?: PartialJsonFormatter;
 	/**
 	 * Parsing options
 	 */
-	parser?: JsonParser;
+	parser?: PartialJsonParser;
 }
-export interface LinterConfiguration {
+export interface PartialLinterConfiguration {
 	/**
 	 * if `false`, it disables the feature and the linter won't be executed. `true` by default
 	 */
@@ -171,7 +200,7 @@ export interface LinterConfiguration {
 	 */
 	rules?: Rules;
 }
-export interface OrganizeImports {
+export interface PartialOrganizeImports {
 	/**
 	 * Enables the organization of imports
 	 */
@@ -185,17 +214,19 @@ export interface OrganizeImports {
 	 */
 	include?: StringSet;
 }
-export interface Overrides {
-	list: OverridePattern[];
-}
+export type Overrides = OverridePattern[];
 /**
  * Set of properties to integrate Biome with a VCS software.
  */
-export interface VcsConfiguration {
+export interface PartialVcsConfiguration {
 	/**
 	 * The kind of client.
 	 */
 	clientKind?: VcsClientKind;
+	/**
+	 * The main branch of the project
+	 */
+	defaultBranch?: string;
 	/**
 	 * Whether Biome should integrate itself with the VCS client
 	 */
@@ -211,7 +242,45 @@ If Biome can't find the configuration, it will attempt to use the current workin
 	 */
 	useIgnoreFile?: boolean;
 }
+export interface PartialCssFormatter {
+	/**
+	 * Control the formatter for CSS (and its super languages) files.
+	 */
+	enabled?: boolean;
+	/**
+	 * The size of the indentation applied to CSS (and its super languages) files. Default to 2.
+	 */
+	indentSize?: number;
+	/**
+	 * The indent style applied to CSS (and its super languages) files.
+	 */
+	indentStyle?: PlainIndentStyle;
+	/**
+	 * The size of the indentation applied to CSS (and its super languages) files. Default to 2.
+	 */
+	indentWidth?: number;
+	/**
+	 * The type of line ending applied to CSS (and its super languages) files.
+	 */
+	lineEnding?: LineEnding;
+	/**
+	 * What's the max width of a line applied to CSS (and its super languages) files. Defaults to 80.
+	 */
+	lineWidth?: LineWidth;
+	quoteStyle?: QuoteStyle;
+}
+/**
+ * Options that changes how the CSS parser behaves
+ */
+export interface PartialCssParser {
+	/**
+	 * Allow comments to appear on incorrect lines in `.css` files
+	 */
+	allowWrongLineComments?: boolean;
+}
+export type AttributePosition = "auto" | "multiline";
 export type PlainIndentStyle = "tab" | "space";
+export type LineEnding = "lf" | "crlf" | "cr";
 /**
 	* Validated value for the `line_width` formatter options
 
@@ -221,11 +290,23 @@ export type LineWidth = number;
 /**
  * Formatting options specific to the JavaScript files
  */
-export interface JavascriptFormatter {
+export interface PartialJavascriptFormatter {
 	/**
 	 * Whether to add non-necessary parentheses to arrow functions. Defaults to "always".
 	 */
 	arrowParentheses?: ArrowParentheses;
+	/**
+	 * The attribute position style in JavaScript code. Defaults to auto.
+	 */
+	attributePosition?: AttributePosition;
+	/**
+	 * Whether to hug the closing bracket of multiline HTML/JSX tags to the end of the last line, rather than being alone on the following line. Defaults to false.
+	 */
+	bracketSameLine?: boolean;
+	/**
+	 * Whether to insert spaces around brackets in object literals. Defaults to true.
+	 */
+	bracketSpacing?: boolean;
 	/**
 	 * Control the formatter for JavaScript (and its super languages) files.
 	 */
@@ -247,7 +328,11 @@ export interface JavascriptFormatter {
 	 */
 	jsxQuoteStyle?: QuoteStyle;
 	/**
-	 * What's the max width of a line, applied to JavaScript (and its super languages) files. Defaults to 80.
+	 * The type of line ending applied to JavaScript (and its super languages) files.
+	 */
+	lineEnding?: LineEnding;
+	/**
+	 * What's the max width of a line applied to JavaScript (and its super languages) files. Defaults to 80.
 	 */
 	lineWidth?: LineWidth;
 	/**
@@ -267,11 +352,11 @@ export interface JavascriptFormatter {
 	 */
 	trailingComma?: TrailingComma;
 }
-export interface JavascriptOrganizeImports {}
+export interface PartialJavascriptOrganizeImports {}
 /**
  * Options that changes how the JavaScript parser behaves
  */
-export interface JavascriptParser {
+export interface PartialJavascriptParser {
 	/**
 	* It enables the experimental and unsafe parsing of parameter decorators
 
@@ -279,7 +364,7 @@ These decorators belong to an old proposal, and they are subject to change.
 	 */
 	unsafeParameterDecoratorsEnabled?: boolean;
 }
-export interface JsonFormatter {
+export interface PartialJsonFormatter {
 	/**
 	 * Control the formatter for JSON (and its super languages) files.
 	 */
@@ -297,14 +382,18 @@ export interface JsonFormatter {
 	 */
 	indentWidth?: number;
 	/**
-	 * What's the max width of a line, applied to JSON (and its super languages) files. Defaults to 80.
+	 * The type of line ending applied to JSON (and its super languages) files.
+	 */
+	lineEnding?: LineEnding;
+	/**
+	 * What's the max width of a line applied to JSON (and its super languages) files. Defaults to 80.
 	 */
 	lineWidth?: LineWidth;
 }
 /**
  * Options that changes how the JSON parser behaves
  */
-export interface JsonParser {
+export interface PartialJsonParser {
 	/**
 	 * Allow parsing comments in `.json` files
 	 */
@@ -334,6 +423,10 @@ export interface Rules {
 }
 export interface OverridePattern {
 	/**
+	 * Specific configuration for the Css language
+	 */
+	css?: PartialCssConfiguration;
+	/**
 	 * Specific configuration for the Json language
 	 */
 	formatter?: OverrideFormatterConfiguration;
@@ -348,11 +441,11 @@ export interface OverridePattern {
 	/**
 	 * Specific configuration for the JavaScript language
 	 */
-	javascript?: JavascriptConfiguration;
+	javascript?: PartialJavascriptConfiguration;
 	/**
 	 * Specific configuration for the Json language
 	 */
-	json?: JsonConfiguration;
+	json?: PartialJsonConfiguration;
 	/**
 	 * Specific configuration for the Json language
 	 */
@@ -363,8 +456,8 @@ export interface OverridePattern {
 	organizeImports?: OverrideOrganizeImportsConfiguration;
 }
 export type VcsClientKind = "git";
-export type ArrowParentheses = "always" | "asNeeded";
 export type QuoteStyle = "double" | "single";
+export type ArrowParentheses = "always" | "asNeeded";
 export type QuoteProperties = "asNeeded" | "preserve";
 export type Semicolons = "always" | "asNeeded";
 /**
@@ -383,6 +476,10 @@ export interface A11y {
 	 * Enforce that the accessKey attribute is not used on any HTML element.
 	 */
 	noAccessKey?: RuleConfiguration;
+	/**
+	 * Enforce that aria-hidden="true" is not set on focusable elements.
+	 */
+	noAriaHiddenOnFocusable?: RuleConfiguration;
 	/**
 	 * Enforce that elements that do not support ARIA roles, states, and properties do not have those attributes.
 	 */
@@ -403,6 +500,10 @@ export interface A11y {
 	 * The scope prop should be used only on <th> elements.
 	 */
 	noHeaderScope?: RuleConfiguration;
+	/**
+	 * Enforce that non-interactive ARIA roles are not assigned to interactive HTML elements.
+	 */
+	noInteractiveElementToNoninteractiveRole?: RuleConfiguration;
 	/**
 	 * Enforce that interactive ARIA roles are not assigned to non-interactive HTML elements.
 	 */
@@ -439,6 +540,10 @@ export interface A11y {
 	 * Enforce that anchors have content and that the content is accessible to screen readers.
 	 */
 	useAnchorContent?: RuleConfiguration;
+	/**
+	 * Enforce that tabIndex is assigned to non-interactive HTML elements with aria-activedescendant.
+	 */
+	useAriaActivedescendantWithTabindex?: RuleConfiguration;
 	/**
 	 * Enforce that elements with ARIA roles must have all required ARIA attributes for that role.
 	 */
@@ -480,6 +585,10 @@ export interface A11y {
 	 */
 	useValidAriaProps?: RuleConfiguration;
 	/**
+	 * Elements with ARIA roles must use a valid, non-abstract ARIA role.
+	 */
+	useValidAriaRole?: RuleConfiguration;
+	/**
 	 * Enforce that ARIA state and property values are valid.
 	 */
 	useValidAriaValues?: RuleConfiguration;
@@ -520,6 +629,10 @@ export interface Complexity {
 	 * This rule reports when a class has no non-static members, such as for a class used exclusively as a static namespace.
 	 */
 	noStaticOnlyClass?: RuleConfiguration;
+	/**
+	 * Disallow this and super in static contexts.
+	 */
+	noThisInStatic?: RuleConfiguration;
 	/**
 	 * Disallow unnecessary catch clauses.
 	 */
@@ -569,6 +682,10 @@ export interface Complexity {
 	 */
 	recommended?: boolean;
 	/**
+	 * Use arrow functions over function expressions.
+	 */
+	useArrowFunction?: RuleConfiguration;
+	/**
 	 * Promotes the use of .flatMap() when map().flat() are used together.
 	 */
 	useFlatMap?: RuleConfiguration;
@@ -580,6 +697,10 @@ export interface Complexity {
 	 * Enforce using concise optional chain instead of chained logical expressions.
 	 */
 	useOptionalChain?: RuleConfiguration;
+	/**
+	 * Enforce the use of the regular expression literals instead of the RegExp constructor if possible.
+	 */
+	useRegexLiterals?: RuleConfiguration;
 	/**
 	 * Disallow number literal object member names which are not base10 or uses underscore as separator
 	 */
@@ -614,6 +735,10 @@ export interface Correctness {
 	 */
 	noConstructorReturn?: RuleConfiguration;
 	/**
+	 * Disallow empty character classes in regular expression literals.
+	 */
+	noEmptyCharacterClassInRegex?: RuleConfiguration;
+	/**
 	 * Disallows empty destructuring patterns.
 	 */
 	noEmptyPattern?: RuleConfiguration;
@@ -629,6 +754,10 @@ export interface Correctness {
 	 * Prevents the incorrect use of super() inside classes. It also checks whether a call super() is missing from classes that extends other constructors.
 	 */
 	noInvalidConstructorSuper?: RuleConfiguration;
+	/**
+	 * Disallow new operators with global non-constructor functions.
+	 */
+	noInvalidNewBuiltin?: RuleConfiguration;
 	/**
 	 * Disallow new operators with the Symbol object.
 	 */
@@ -735,10 +864,6 @@ export interface Nursery {
 	 */
 	all?: boolean;
 	/**
-	 * Usually, the definition in the standard library is more precise than what people come up with or the used constant exceeds the maximum precision of the number type.
-	 */
-	noApproximativeNumericConstant?: RuleConfiguration;
-	/**
 	 * Disallow two keys with the same name inside a JSON object.
 	 */
 	noDuplicateJsonKeys?: RuleConfiguration;
@@ -747,53 +872,85 @@ export interface Nursery {
 	 */
 	noEmptyBlockStatements?: RuleConfiguration;
 	/**
-	 * Disallow empty character classes in regular expression literals.
+	 * Disallow empty type parameters in type aliases and interfaces.
 	 */
-	noEmptyCharacterClassInRegex?: RuleConfiguration;
+	noEmptyTypeParameters?: RuleConfiguration;
 	/**
-	 * Enforce that non-interactive ARIA roles are not assigned to interactive HTML elements.
+	 * Disallow focused tests.
 	 */
-	noInteractiveElementToNoninteractiveRole?: RuleConfiguration;
+	noFocusedTests?: RuleConfiguration;
 	/**
-	 * Disallow new operators with global non-constructor functions.
+	 * Disallow assignments to native objects and read-only global variables.
 	 */
-	noInvalidNewBuiltin?: RuleConfiguration;
+	noGlobalAssign?: RuleConfiguration;
 	/**
-	 * Enforce proper usage of new and constructor.
+	 * Disallow the use of global eval().
 	 */
-	noMisleadingInstantiator?: RuleConfiguration;
+	noGlobalEval?: RuleConfiguration;
 	/**
-	 * Disallow shorthand assign when variable appears on both sides.
+	 * Disallow the use of variables and function parameters before their declaration
 	 */
-	noMisrefactoredShorthandAssign?: RuleConfiguration;
+	noInvalidUseBeforeDeclaration?: RuleConfiguration;
+	/**
+	 * Disallow characters made with multiple code points in character class syntax.
+	 */
+	noMisleadingCharacterClass?: RuleConfiguration;
+	/**
+	 * Forbid the use of Node.js builtin modules.
+	 */
+	noNodejsModules?: RuleConfiguration;
+	/**
+	 * Avoid re-export all
+	 */
+	noReExportAll?: RuleConfiguration;
+	/**
+	 * Disallow disabled tests.
+	 */
+	noSkippedTests?: RuleConfiguration;
+	/**
+	 * Disallow then property.
+	 */
+	noThenProperty?: RuleConfiguration;
 	/**
 	 * Disallow unused imports.
 	 */
 	noUnusedImports?: RuleConfiguration;
 	/**
-	 * Disallow else block when the if block breaks early.
+	 * Disallow unused private class members
 	 */
-	noUselessElse?: RuleConfiguration;
+	noUnusedPrivateClassMembers?: RuleConfiguration;
 	/**
 	 * Disallow unnecessary nested block statements.
 	 */
 	noUselessLoneBlockStatements?: RuleConfiguration;
 	/**
+	 * Disallow ternary operators when simpler alternatives exist.
+	 */
+	noUselessTernary?: RuleConfiguration;
+	/**
 	 * It enables the recommended rules for this group
 	 */
 	recommended?: boolean;
 	/**
-	 * Enforce that tabIndex is assigned to non-interactive HTML elements with aria-activedescendant.
+	 * Ensure async functions utilize await.
 	 */
-	useAriaActivedescendantWithTabindex?: RuleConfiguration;
+	useAwait?: RuleConfiguration;
 	/**
-	 * Use arrow functions over function expressions.
+	 * Require consistently using either T[] or Array<T>
 	 */
-	useArrowFunction?: RuleConfiguration;
+	useConsistentArrayType?: RuleConfiguration;
 	/**
-	 * Enforce the use of as const over literal type and type annotation.
+	 * Promotes the use of export type for types.
 	 */
-	useAsConstAssertion?: RuleConfiguration;
+	useExportType?: RuleConfiguration;
+	/**
+	 * Enforce naming conventions for JavaScript and TypeScript filenames.
+	 */
+	useFilenamingConvention?: RuleConfiguration;
+	/**
+	 * This rule recommends a for-of loop when in a for loop, the index used to extract an item from the iterated array.
+	 */
+	useForOf?: RuleConfiguration;
 	/**
 	 * Enforce the use of import type when an import only has specifiers with type qualifier.
 	 */
@@ -803,9 +960,25 @@ export interface Nursery {
 	 */
 	useImportRestrictions?: RuleConfiguration;
 	/**
-	 * Require assignment operator shorthand where possible.
+	 * Promotes the use of import type for types.
 	 */
-	useShorthandAssign?: RuleConfiguration;
+	useImportType?: RuleConfiguration;
+	/**
+	 * Enforces using the node: protocol for Node.js builtin modules.
+	 */
+	useNodejsImportProtocol?: RuleConfiguration;
+	/**
+	 * Use the Number properties instead of global ones.
+	 */
+	useNumberNamespace?: RuleConfiguration;
+	/**
+	 * Enforce using function types instead of object type with call signatures.
+	 */
+	useShorthandFunctionType?: RuleConfiguration;
+	/**
+	 * Enforce the sorting of CSS utility classes.
+	 */
+	useSortedClasses?: RuleConfiguration;
 }
 /**
  * A list of rules that belong to this group
@@ -858,13 +1031,17 @@ export interface Style {
 	 */
 	all?: boolean;
 	/**
-	 * Disallow the use of arguments
+	 * Disallow the use of arguments.
 	 */
 	noArguments?: RuleConfiguration;
 	/**
 	 * Disallow comma operator.
 	 */
 	noCommaOperator?: RuleConfiguration;
+	/**
+	 * Disallow default exports.
+	 */
+	noDefaultExport?: RuleConfiguration;
 	/**
 	 * Disallow implicit true values on JSX boolean attributes
 	 */
@@ -906,6 +1083,10 @@ export interface Style {
 	 */
 	noUnusedTemplateLiteral?: RuleConfiguration;
 	/**
+	 * Disallow else block when the if block breaks early.
+	 */
+	noUselessElse?: RuleConfiguration;
+	/**
 	 * Disallow the use of var
 	 */
 	noVar?: RuleConfiguration;
@@ -913,6 +1094,10 @@ export interface Style {
 	 * It enables the recommended rules for this group
 	 */
 	recommended?: boolean;
+	/**
+	 * Enforce the use of as const over literal type and type annotation.
+	 */
+	useAsConstAssertion?: RuleConfiguration;
 	/**
 	 * Requires following curly brace conventions.
 	 */
@@ -962,6 +1147,10 @@ export interface Style {
 	 */
 	useShorthandArrayType?: RuleConfiguration;
 	/**
+	 * Require assignment operator shorthand where possible.
+	 */
+	useShorthandAssign?: RuleConfiguration;
+	/**
 	 * Enforces switch clauses have a single statement, emits a quick fix wrapping the statements in a block.
 	 */
 	useSingleCaseStatement?: RuleConfiguration;
@@ -986,6 +1175,10 @@ export interface Suspicious {
 	 * It enables ALL rules for this group.
 	 */
 	all?: boolean;
+	/**
+	 * Use standard constants instead of approximated literals.
+	 */
+	noApproximativeNumericConstant?: RuleConfiguration;
 	/**
 	 * Discourage the usage of Array index in keys.
 	 */
@@ -1091,6 +1284,10 @@ export interface Suspicious {
 	 */
 	noGlobalIsNan?: RuleConfiguration;
 	/**
+	 * Disallow use of implicit any type on variable declarations.
+	 */
+	noImplicitAnyLet?: RuleConfiguration;
+	/**
 	 * Disallow assigning to imported bindings
 	 */
 	noImportAssign?: RuleConfiguration;
@@ -1098,6 +1295,14 @@ export interface Suspicious {
 	 * Disallow labels that share a name with a variable
 	 */
 	noLabelVar?: RuleConfiguration;
+	/**
+	 * Enforce proper usage of new and constructor.
+	 */
+	noMisleadingInstantiator?: RuleConfiguration;
+	/**
+	 * Disallow shorthand assign when variable appears on both sides.
+	 */
+	noMisrefactoredShorthandAssign?: RuleConfiguration;
 	/**
 	 * Disallow direct use of Object.prototype builtins.
 	 */
@@ -1156,6 +1361,10 @@ export interface Suspicious {
 	useValidTypeof?: RuleConfiguration;
 }
 export interface OverrideFormatterConfiguration {
+	/**
+	 * The attribute position style.
+	 */
+	attributePosition?: AttributePosition;
 	enabled?: boolean;
 	/**
 	 * Stores whether formatting should be allowed to proceed if a given file has syntax errors
@@ -1173,6 +1382,10 @@ export interface OverrideFormatterConfiguration {
 	 * The size of the indentation, 2 by default
 	 */
 	indentWidth?: number;
+	/**
+	 * The type of line ending.
+	 */
+	lineEnding?: LineEnding;
 	/**
 	 * What's the max width of a line. Defaults to 80.
 	 */
@@ -1202,10 +1415,14 @@ export interface RuleWithOptions {
 }
 export type PossibleOptions =
 	| ComplexityOptions
+	| ConsistentArrayTypeOptions
+	| FilenamingConventionOptions
 	| HooksOptions
+	| DeprecatedHooksOptions
 	| NamingConventionOptions
 	| RestrictedGlobalsOptions
-	| null;
+	| ValidAriaRoleOptions
+	| UtilityClassSortingOptions;
 /**
  * Options for the rule `noExcessiveCognitiveComplexity`.
  */
@@ -1215,8 +1432,24 @@ export interface ComplexityOptions {
 	 */
 	maxAllowedComplexity: number;
 }
+export interface ConsistentArrayTypeOptions {
+	syntax: ConsistentArrayType;
+}
 /**
- * Options for the rule `useExhaustiveDependencies` and `useHookAtTopLevel`
+ * Rule's options.
+ */
+export interface FilenamingConventionOptions {
+	/**
+	 * Allowed cases for _TypeScript_ `enum` member names.
+	 */
+	filenameCases: FilenameCases;
+	/**
+	 * If `false`, then consecutive uppercase are allowed in _camel_ and _pascal_ cases. This does not affect other [Case].
+	 */
+	strictCase: boolean;
+}
+/**
+ * Options for the rule `useExhaustiveDependencies`
  */
 export interface HooksOptions {
 	/**
@@ -1224,6 +1457,10 @@ export interface HooksOptions {
 	 */
 	hooks: Hooks[];
 }
+/**
+ * Options for the `useHookAtTopLevel` rule have been deprecated, since we now use the React hook naming convention to determine whether a function is a hook.
+ */
+export interface DeprecatedHooksOptions {}
 /**
  * Rule's options.
  */
@@ -1244,8 +1481,24 @@ export interface RestrictedGlobalsOptions {
 	/**
 	 * A list of names that should trigger the rule
 	 */
-	deniedGlobals?: string[];
+	deniedGlobals: string[];
 }
+export interface ValidAriaRoleOptions {
+	allowInvalidRoles: string[];
+	ignoreNonDom: boolean;
+}
+export interface UtilityClassSortingOptions {
+	/**
+	 * Additional attributes that will be sorted.
+	 */
+	attributes?: string[];
+	/**
+	 * Names of the functions or tagged templates that will be sorted.
+	 */
+	functions?: string[];
+}
+export type ConsistentArrayType = "shorthand" | "generic";
+export type FilenameCases = FilenameCase[];
 export interface Hooks {
 	/**
 	* The "position" of the closure function, starting from zero.
@@ -1266,6 +1519,19 @@ export interface Hooks {
  * Supported cases for TypeScript `enum` member names.
  */
 export type EnumMemberCase = "PascalCase" | "CONSTANT_CASE" | "camelCase";
+/**
+ * Supported cases for TypeScript `enum` member names.
+ */
+export type FilenameCase =
+	| "camelCase"
+	| "export"
+	| "kebab-case"
+	| "PascalCase"
+	| "snake_case";
+export interface ProjectFeaturesParams {
+	manifest_path: RomePath;
+}
+export interface ProjectFeaturesResult {}
 export interface OpenFileParams {
 	content: string;
 	language_hint?: Language;
@@ -1276,12 +1542,14 @@ export interface OpenFileParams {
  * Supported languages by Biome
  */
 export type Language =
+	| "Astro"
 	| "JavaScript"
 	| "JavaScriptReact"
 	| "TypeScript"
 	| "TypeScriptReact"
 	| "Json"
 	| "Jsonc"
+	| "Css"
 	| "Unknown";
 export interface ChangeFileParams {
 	content: string;
@@ -1349,11 +1617,13 @@ export interface Advices {
 }
 export type Category =
 	| "lint/a11y/noAccessKey"
+	| "lint/a11y/noAriaHiddenOnFocusable"
 	| "lint/a11y/noAriaUnsupportedElements"
 	| "lint/a11y/noAutofocus"
 	| "lint/a11y/noBlankTarget"
 	| "lint/a11y/noDistractingElements"
 	| "lint/a11y/noHeaderScope"
+	| "lint/a11y/noInteractiveElementToNoninteractiveRole"
 	| "lint/a11y/noNoninteractiveElementToInteractiveRole"
 	| "lint/a11y/noNoninteractiveTabindex"
 	| "lint/a11y/noPositiveTabindex"
@@ -1362,6 +1632,7 @@ export type Category =
 	| "lint/a11y/noSvgWithoutTitle"
 	| "lint/a11y/useAltText"
 	| "lint/a11y/useAnchorContent"
+	| "lint/a11y/useAriaActivedescendantWithTabindex"
 	| "lint/a11y/useAriaPropsForRole"
 	| "lint/a11y/useButtonType"
 	| "lint/a11y/useHeadingContent"
@@ -1372,6 +1643,7 @@ export type Category =
 	| "lint/a11y/useMediaCaption"
 	| "lint/a11y/useValidAnchor"
 	| "lint/a11y/useValidAriaProps"
+	| "lint/a11y/useValidAriaRole"
 	| "lint/a11y/useValidAriaValues"
 	| "lint/a11y/useValidLang"
 	| "lint/complexity/noBannedTypes"
@@ -1380,6 +1652,7 @@ export type Category =
 	| "lint/complexity/noForEach"
 	| "lint/complexity/noMultipleSpacesInRegularExpressionLiterals"
 	| "lint/complexity/noStaticOnlyClass"
+	| "lint/complexity/noThisInStatic"
 	| "lint/complexity/noUselessCatch"
 	| "lint/complexity/noUselessConstructor"
 	| "lint/complexity/noUselessEmptyExport"
@@ -1391,19 +1664,23 @@ export type Category =
 	| "lint/complexity/noUselessTypeConstraint"
 	| "lint/complexity/noVoid"
 	| "lint/complexity/noWith"
+	| "lint/complexity/useArrowFunction"
 	| "lint/complexity/useFlatMap"
 	| "lint/complexity/useLiteralKeys"
 	| "lint/complexity/useOptionalChain"
+	| "lint/complexity/useRegexLiterals"
 	| "lint/complexity/useSimpleNumberKeys"
 	| "lint/complexity/useSimplifiedLogicExpression"
 	| "lint/correctness/noChildrenProp"
 	| "lint/correctness/noConstAssign"
 	| "lint/correctness/noConstantCondition"
 	| "lint/correctness/noConstructorReturn"
+	| "lint/correctness/noEmptyCharacterClassInRegex"
 	| "lint/correctness/noEmptyPattern"
 	| "lint/correctness/noGlobalObjectCalls"
 	| "lint/correctness/noInnerDeclarations"
 	| "lint/correctness/noInvalidConstructorSuper"
+	| "lint/correctness/noInvalidNewBuiltin"
 	| "lint/correctness/noNewSymbol"
 	| "lint/correctness/noNonoctalDecimalEscape"
 	| "lint/correctness/noPrecisionLoss"
@@ -1430,27 +1707,41 @@ export type Category =
 	| "lint/nursery/noApproximativeNumericConstant"
 	| "lint/nursery/noDuplicateJsonKeys"
 	| "lint/nursery/noEmptyBlockStatements"
-	| "lint/nursery/noEmptyCharacterClassInRegex"
-	| "lint/nursery/noInteractiveElementToNoninteractiveRole"
-	| "lint/nursery/noInvalidNewBuiltin"
-	| "lint/nursery/noMisleadingInstantiator"
-	| "lint/nursery/noMisrefactoredShorthandAssign"
+	| "lint/nursery/noEmptyTypeParameters"
+	| "lint/nursery/noFocusedTests"
+	| "lint/nursery/noGlobalAssign"
+	| "lint/nursery/noGlobalEval"
+	| "lint/nursery/noInvalidUseBeforeDeclaration"
+	| "lint/nursery/noMisleadingCharacterClass"
+	| "lint/nursery/noNodejsModules"
+	| "lint/nursery/noReExportAll"
+	| "lint/nursery/noSkippedTests"
+	| "lint/nursery/noThenProperty"
+	| "lint/nursery/noTypeOnlyImportAttributes"
 	| "lint/nursery/noUnusedImports"
-	| "lint/nursery/noUselessElse"
+	| "lint/nursery/noUnusedPrivateClassMembers"
 	| "lint/nursery/noUselessLoneBlockStatements"
-	| "lint/nursery/useAriaActivedescendantWithTabindex"
-	| "lint/nursery/useArrowFunction"
-	| "lint/nursery/useAsConstAssertion"
+	| "lint/nursery/noUselessTernary"
+	| "lint/nursery/useAwait"
 	| "lint/nursery/useBiomeSuppressionComment"
+	| "lint/nursery/useConsistentArrayType"
+	| "lint/nursery/useExportType"
+	| "lint/nursery/useFilenamingConvention"
+	| "lint/nursery/useForOf"
 	| "lint/nursery/useGroupedTypeImport"
 	| "lint/nursery/useImportRestrictions"
-	| "lint/nursery/useShorthandAssign"
+	| "lint/nursery/useImportType"
+	| "lint/nursery/useNodejsImportProtocol"
+	| "lint/nursery/useNumberNamespace"
+	| "lint/nursery/useShorthandFunctionType"
+	| "lint/nursery/useSortedClasses"
 	| "lint/performance/noAccumulatingSpread"
 	| "lint/performance/noDelete"
 	| "lint/security/noDangerouslySetInnerHtml"
 	| "lint/security/noDangerouslySetInnerHtmlWithChildren"
 	| "lint/style/noArguments"
 	| "lint/style/noCommaOperator"
+	| "lint/style/noDefaultExport"
 	| "lint/style/noImplicitBoolean"
 	| "lint/style/noInferrableTypes"
 	| "lint/style/noNamespace"
@@ -1461,7 +1752,9 @@ export type Category =
 	| "lint/style/noRestrictedGlobals"
 	| "lint/style/noShoutyConstants"
 	| "lint/style/noUnusedTemplateLiteral"
+	| "lint/style/noUselessElse"
 	| "lint/style/noVar"
+	| "lint/style/useAsConstAssertion"
 	| "lint/style/useBlockStatements"
 	| "lint/style/useCollapsedElseIf"
 	| "lint/style/useConst"
@@ -1474,10 +1767,12 @@ export type Category =
 	| "lint/style/useNumericLiterals"
 	| "lint/style/useSelfClosingElements"
 	| "lint/style/useShorthandArrayType"
+	| "lint/style/useShorthandAssign"
 	| "lint/style/useSingleCaseStatement"
 	| "lint/style/useSingleVarDeclarator"
 	| "lint/style/useTemplate"
 	| "lint/style/useWhile"
+	| "lint/suspicious/noApproximativeNumericConstant"
 	| "lint/suspicious/noArrayIndexKey"
 	| "lint/suspicious/noAssignInExpressions"
 	| "lint/suspicious/noAsyncPromiseExecutor"
@@ -1504,8 +1799,11 @@ export type Category =
 	| "lint/suspicious/noFunctionAssign"
 	| "lint/suspicious/noGlobalIsFinite"
 	| "lint/suspicious/noGlobalIsNan"
+	| "lint/suspicious/noImplicitAnyLet"
 	| "lint/suspicious/noImportAssign"
 	| "lint/suspicious/noLabelVar"
+	| "lint/suspicious/noMisleadingInstantiator"
+	| "lint/suspicious/noMisrefactoredShorthandAssign"
 	| "lint/suspicious/noPrototypeBuiltins"
 	| "lint/suspicious/noRedeclare"
 	| "lint/suspicious/noRedundantUseStrict"
@@ -1527,11 +1825,13 @@ export type Category =
 	| "organizeImports"
 	| "migrate"
 	| "deserialize"
+	| "project"
 	| "internalError/io"
 	| "internalError/fs"
 	| "internalError/panic"
 	| "parse"
 	| "parse/noSuperWithoutExtends"
+	| "parse/noInitializerWithDefinite"
 	| "parse/noDuplicatePrivateClassMembers"
 	| "lint"
 	| "lint/a11y"
@@ -1590,7 +1890,8 @@ export type DiagnosticTag =
 	| "fixable"
 	| "internal"
 	| "unnecessaryCode"
-	| "deprecatedCode";
+	| "deprecatedCode"
+	| "verbose";
 /**
  * The category for a log advice, defines how the message should be presented to the user.
  */
@@ -1774,9 +2075,13 @@ export interface RenameResult {
 	 */
 	range: TextRange;
 }
+export type Configuration = PartialConfiguration;
 export interface Workspace {
 	fileFeatures(params: SupportsFeatureParams): Promise<SupportsFeatureResult>;
 	updateSettings(params: UpdateSettingsParams): Promise<void>;
+	projectFeatures(
+		params: ProjectFeaturesParams,
+	): Promise<ProjectFeaturesResult>;
 	openFile(params: OpenFileParams): Promise<void>;
 	changeFile(params: ChangeFileParams): Promise<void>;
 	closeFile(params: CloseFileParams): Promise<void>;
@@ -1805,6 +2110,9 @@ export function createWorkspace(transport: Transport): Workspace {
 		},
 		updateSettings(params) {
 			return transport.request("biome/update_settings", params);
+		},
+		projectFeatures(params) {
+			return transport.request("biome/project_features", params);
 		},
 		openFile(params) {
 			return transport.request("biome/open_file", params);

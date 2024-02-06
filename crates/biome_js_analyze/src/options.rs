@@ -1,51 +1,51 @@
 //! This module contains the rules that have options
 
-use crate::analyzers::complexity::no_excessive_cognitive_complexity::{
-    complexity_options, ComplexityOptions,
-};
-use crate::semantic_analyzers::correctness::use_exhaustive_dependencies::{
-    hooks_options, HooksOptions,
-};
-use crate::semantic_analyzers::style::no_restricted_globals::{
-    restricted_globals_options, RestrictedGlobalsOptions,
-};
-use crate::semantic_analyzers::style::use_naming_convention::{
-    naming_convention_options, NamingConventionOptions,
+use crate::analyzers::nursery::use_consistent_array_type::ConsistentArrayTypeOptions;
+use crate::analyzers::nursery::use_filenaming_convention::FilenamingConventionOptions;
+use crate::semantic_analyzers::correctness::use_exhaustive_dependencies::HooksOptions;
+use crate::semantic_analyzers::correctness::use_hook_at_top_level::DeprecatedHooksOptions;
+use crate::semantic_analyzers::nursery::use_sorted_classes::UtilityClassSortingOptions;
+use crate::semantic_analyzers::style::no_restricted_globals::RestrictedGlobalsOptions;
+use crate::semantic_analyzers::style::use_naming_convention::NamingConventionOptions;
+use crate::{
+    analyzers::complexity::no_excessive_cognitive_complexity::ComplexityOptions,
+    aria_analyzers::a11y::use_valid_aria_role::ValidAriaRoleOptions,
 };
 use biome_analyze::options::RuleOptions;
 use biome_analyze::RuleKey;
-use biome_deserialize::json::VisitJsonNode;
-use biome_deserialize::{DeserializationDiagnostic, VisitNode};
-use biome_json_syntax::{AnyJsonValue, JsonLanguage, JsonMemberName, JsonObjectValue};
-use biome_rowan::AstNode;
-use bpaf::Bpaf;
+use biome_console::markup;
+use biome_deserialize::{Deserializable, DeserializableValue, DeserializationDiagnostic};
 #[cfg(feature = "schemars")]
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::str::FromStr;
 
-#[derive(Default, Deserialize, Serialize, Debug, Eq, PartialEq, Clone, Bpaf)]
+#[derive(Deserialize, Serialize, Debug, Eq, PartialEq, Clone)]
 #[cfg_attr(feature = "schemars", derive(JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields, untagged)]
 pub enum PossibleOptions {
     /// Options for `noExcessiveComplexity` rule
-    Complexity(#[bpaf(external(complexity_options), hide)] ComplexityOptions),
-    /// Options for `useExhaustiveDependencies` and `useHookAtTopLevel` rule
-    Hooks(#[bpaf(external(hooks_options), hide)] HooksOptions),
+    Complexity(ComplexityOptions),
+    /// Options for `useConsistentArrayType` rule
+    ConsistentArrayType(ConsistentArrayTypeOptions),
+    /// Options for `useFilenamingConvention` rule
+    FilenamingConvention(FilenamingConventionOptions),
+    /// Options for `useExhaustiveDependencies` rule
+    Hooks(HooksOptions),
+    /// Deprecated options for `useHookAtTopLevel` rule
+    DeprecatedHooks(DeprecatedHooksOptions),
     /// Options for `useNamingConvention` rule
-    NamingConvention(#[bpaf(external(naming_convention_options), hide)] NamingConventionOptions),
+    NamingConvention(NamingConventionOptions),
     /// Options for `noRestrictedGlobals` rule
-    RestrictedGlobals(#[bpaf(external(restricted_globals_options), hide)] RestrictedGlobalsOptions),
-    /// No options available
-    #[default]
-    NoOptions,
+    RestrictedGlobals(RestrictedGlobalsOptions),
+    /// Options for `useValidAriaRole` rule
+    ValidAriaRole(ValidAriaRoleOptions),
+    /// Options for `useSortedClasses` rule
+    UtilityClassSorting(UtilityClassSortingOptions),
 }
 
-impl FromStr for PossibleOptions {
-    type Err = ();
-
-    fn from_str(_s: &str) -> Result<Self, Self::Err> {
-        Ok(Self::NoOptions)
+impl Default for PossibleOptions {
+    fn default() -> Self {
+        Self::Complexity(ComplexityOptions::default())
     }
 }
 
@@ -59,10 +59,31 @@ impl PossibleOptions {
                 };
                 RuleOptions::new(options)
             }
-            "useExhaustiveDependencies" | "useHookAtTopLevel" => {
+            "useConsistentArrayType" => {
+                let options = match self {
+                    PossibleOptions::ConsistentArrayType(options) => options.clone(),
+                    _ => ConsistentArrayTypeOptions::default(),
+                };
+                RuleOptions::new(options)
+            }
+            "useExhaustiveDependencies" => {
                 let options = match self {
                     PossibleOptions::Hooks(options) => options.clone(),
                     _ => HooksOptions::default(),
+                };
+                RuleOptions::new(options)
+            }
+            "useFilenamingConvention" => {
+                let options = match self {
+                    PossibleOptions::FilenamingConvention(options) => options.clone(),
+                    _ => FilenamingConventionOptions::default(),
+                };
+                RuleOptions::new(options)
+            }
+            "useHookAtTopLevel" => {
+                let options = match self {
+                    PossibleOptions::DeprecatedHooks(options) => options.clone(),
+                    _ => DeprecatedHooksOptions::default(),
                 };
                 RuleOptions::new(options)
             }
@@ -80,119 +101,63 @@ impl PossibleOptions {
                 };
                 RuleOptions::new(options)
             }
+            "useValidAriaRole" => {
+                let options = match self {
+                    PossibleOptions::ValidAriaRole(options) => options.clone(),
+                    _ => ValidAriaRoleOptions::default(),
+                };
+                RuleOptions::new(options)
+            }
+            "useSortedClasses" => {
+                let options = match self {
+                    PossibleOptions::UtilityClassSorting(options) => options.clone(),
+                    _ => UtilityClassSortingOptions::default(),
+                };
+                RuleOptions::new(options)
+            }
             // TODO: review error
             _ => panic!("This rule {:?} doesn't have options", rule_key),
         }
     }
 }
 
-impl PossibleOptions {
-    pub fn map_to_rule_options(
-        &mut self,
-        value: &AnyJsonValue,
-        name: &str,
+impl Deserializable for PossibleOptions {
+    fn deserialize(
+        value: &impl DeserializableValue,
         rule_name: &str,
         diagnostics: &mut Vec<DeserializationDiagnostic>,
-    ) -> Option<()> {
-        let value = JsonObjectValue::cast_ref(value.syntax()).or_else(|| {
-            diagnostics.push(DeserializationDiagnostic::new_incorrect_type_for_value(
-                name,
-                "object",
-                value.range(),
-            ));
-            None
-        })?;
-        for element in value.json_member_list() {
-            let element = element.ok()?;
-            let key = element.name().ok()?;
-            let value = element.value().ok()?;
-            let name = key.inner_string_text().ok()?;
-            self.validate_key(&key, rule_name, diagnostics)?;
-            match name.text() {
-                "hooks" => {
-                    let mut options = HooksOptions::default();
-                    self.map_to_array(&value, &name, &mut options, diagnostics)?;
-                    *self = PossibleOptions::Hooks(options);
-                }
-                "maxAllowedComplexity" => {
-                    let mut options = ComplexityOptions::default();
-                    options.visit_map(key.syntax(), value.syntax(), diagnostics)?;
-                    *self = PossibleOptions::Complexity(options);
-                }
-                "strictCase" | "enumMemberCase" => {
-                    let mut options = match self {
-                        PossibleOptions::NamingConvention(options) => options.clone(),
-                        _ => NamingConventionOptions::default(),
-                    };
-                    options.visit_map(key.syntax(), value.syntax(), diagnostics)?;
-                    *self = PossibleOptions::NamingConvention(options);
-                }
-
-                "deniedGlobals" => {
-                    let mut options = match self {
-                        PossibleOptions::RestrictedGlobals(options) => options.clone(),
-                        _ => RestrictedGlobalsOptions::default(),
-                    };
-                    options.visit_map(key.syntax(), value.syntax(), diagnostics)?;
-                    *self = PossibleOptions::RestrictedGlobals(options);
-                }
-                _ => (),
-            }
-        }
-
-        Some(())
-    }
-
-    pub fn validate_key(
-        &mut self,
-        node: &JsonMemberName,
-        rule_name: &str,
-        diagnostics: &mut Vec<DeserializationDiagnostic>,
-    ) -> Option<()> {
-        let key_name = node.inner_string_text().ok()?;
-        let key_name = key_name.text();
+    ) -> Option<Self> {
         match rule_name {
-            "useExhaustiveDependencies" | "useHookAtTopLevel" => {
-                if key_name != "hooks" {
-                    diagnostics.push(DeserializationDiagnostic::new_unknown_key(
-                        key_name,
-                        node.range(),
-                        &["hooks"],
-                    ));
-                }
+            "noExcessiveCognitiveComplexity" => {
+                Deserializable::deserialize(value, "options", diagnostics).map(Self::Complexity)
             }
-            "useNamingConvention" => {
-                if !matches!(key_name, "strictCase" | "enumMemberCase") {
-                    diagnostics.push(DeserializationDiagnostic::new_unknown_key(
-                        key_name,
-                        node.range(),
-                        &["strictCase", "enumMemberCase"],
-                    ));
-                }
+            "noRestrictedGlobals" => Deserializable::deserialize(value, "options", diagnostics)
+                .map(Self::RestrictedGlobals),
+            "useConsistentArrayType" => Deserializable::deserialize(value, "options", diagnostics)
+                .map(Self::ConsistentArrayType),
+            "useExhaustiveDependencies" => {
+                Deserializable::deserialize(value, "options", diagnostics).map(Self::Hooks)
             }
-            "noExcessiveComplexity" => {
-                if !matches!(key_name, "maxAllowedComplexity") {
-                    diagnostics.push(DeserializationDiagnostic::new_unknown_key(
-                        key_name,
-                        node.range(),
-                        &["maxAllowedComplexity"],
-                    ));
-                }
+            "useHookAtTopLevel" => Deserializable::deserialize(value, "options", diagnostics)
+                .map(Self::DeprecatedHooks),
+            "useFilenamingConvention" => Deserializable::deserialize(value, "options", diagnostics)
+                .map(Self::FilenamingConvention),
+            "useNamingConvention" => Deserializable::deserialize(value, "options", diagnostics)
+                .map(Self::NamingConvention),
+            "useValidAriaRole" => {
+                Deserializable::deserialize(value, "options", diagnostics).map(Self::ValidAriaRole)
             }
-            "noRestrictedGlobals" => {
-                if !matches!(key_name, "deniedGlobals") {
-                    diagnostics.push(DeserializationDiagnostic::new_unknown_key(
-                        key_name,
-                        node.range(),
-                        &["deniedGlobals"],
-                    ));
-                }
+            "useSortedClasses" => Deserializable::deserialize(value, "options", diagnostics)
+                .map(Self::UtilityClassSorting),
+            _ => {
+                diagnostics.push(
+                    DeserializationDiagnostic::new(markup! {
+                        "The rule "<Emphasis>{rule_name}</Emphasis>" doesn't accept any options."
+                    })
+                    .with_range(value.range()),
+                );
+                None
             }
-            _ => {}
         }
-
-        Some(())
     }
 }
-
-impl VisitNode<JsonLanguage> for PossibleOptions {}

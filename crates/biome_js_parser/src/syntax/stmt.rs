@@ -29,7 +29,7 @@ use crate::syntax::typescript::ts_parse_error::{expected_ts_type, ts_only_syntax
 use crate::span::Span;
 use crate::JsSyntaxFeature::{StrictMode, TypeScript};
 use crate::ParsedSyntax::{Absent, Present};
-use crate::{parser, JsParser, JsSyntaxFeature, ParseRecovery};
+use crate::{parser, JsParser, JsSyntaxFeature, ParseRecoveryTokenSet};
 use biome_js_syntax::{JsSyntaxKind::*, *};
 use biome_parser::diagnostic::expected_token;
 use biome_parser::parse_lists::{ParseNodeList, ParseSeparatedList};
@@ -92,11 +92,11 @@ pub(crate) fn semi(p: &mut JsParser, err_range: TextRange) -> bool {
                 "Expected a semicolon or an implicit semicolon after a statement, but found none",
                 p.cur_range(),
             )
-            .detail(
+            .with_detail(
                 p.cur_range(),
                 "An explicit or implicit semicolon is expected here...",
             )
-            .detail(err_range, "...Which is required to end this statement");
+            .with_detail(err_range, "...Which is required to end this statement");
 
         p.error(err);
         false
@@ -176,13 +176,13 @@ pub(crate) fn parse_statement(p: &mut JsParser, context: StatementContext) -> Pa
                         "Illegal use of an import declaration outside of a module",
                         import.range(p),
                     )
-                    .hint("not allowed inside scripts"),
+                    .with_hint("not allowed inside scripts"),
                 ModuleKind::Module => p
                     .err_builder(
                         "Illegal use of an import declaration not at the top level",
                         import.range(p),
                     )
-                    .hint("move this declaration to the top level"),
+                    .with_hint("move this declaration to the top level"),
             };
 
             p.error(error);
@@ -359,7 +359,7 @@ pub(crate) fn parse_statement(p: &mut JsParser, context: StatementContext) -> Pa
         T![async] if is_at_async_function(p, LineBreak::DoNotCheck) => {
             parse_function_declaration(p, context)
         }
-        T![module] | T![namespace] | T![global] if is_at_any_ts_namespace_declaration(p) => {
+        T![module] | T![namespace] | T![global] if is_nth_at_any_ts_namespace_declaration(p, 0) => {
             let name = p.cur_range();
             TypeScript.parse_exclusive_syntax(
                 p,
@@ -385,13 +385,13 @@ pub(crate) fn parse_non_top_level_export(
                     "Illegal use of an export declaration not at the top level",
                     export.range(p),
                 )
-                .hint("move this declaration to the top level"),
+                .with_hint("move this declaration to the top level"),
             ModuleKind::Script => p
                 .err_builder(
                     "Illegal use of an export declaration outside of a module",
                     export.range(p),
                 )
-                .hint("not allowed inside scripts"),
+                .with_hint("not allowed inside scripts"),
         };
 
         p.error(error);
@@ -419,7 +419,8 @@ pub(crate) fn parse_non_top_level_export(
 // test_err js labelled_function_declaration_strict_mode
 // label1: function a() {}
 fn parse_labeled_statement(p: &mut JsParser, context: StatementContext) -> ParsedSyntax {
-    parse_identifier(p, JS_LABELED_STATEMENT).map(|identifier| {
+    let labelled_statement = p.start();
+    let x = parse_identifier(p, JS_LABEL).map(|identifier| {
 		fn parse_body(p: &mut JsParser, context: StatementContext) -> ParsedSyntax {
 			if is_at_identifier(p) && p.nth_at(1, T![:]) && StrictMode.is_unsupported(p) {
 				// Re-use the parent context to catch `if (true) label1: label2: function A() {}
@@ -433,7 +434,6 @@ fn parse_labeled_statement(p: &mut JsParser, context: StatementContext) -> Parse
 
 		let identifier_range = identifier.range(p);
 		let is_valid_identifier = !identifier.kind(p).is_bogus();
-		let labelled_statement = identifier.undo_completion(p);
         let label = p.text(identifier_range);
 
 		let body = match p.state().get_labelled_item(label) {
@@ -448,11 +448,11 @@ fn parse_labeled_statement(p: &mut JsParser, context: StatementContext) -> Parse
 			Some(label_item) if is_valid_identifier => {
 				let err = p
 					.err_builder("Duplicate statement labels are not allowed", identifier_range)
-					.detail(
+					.with_detail(
 						identifier_range,
 						format!("a second use of `{}` here is not allowed", label),
 					)
-					.detail(
+					.with_detail(
 						*label_item.range(),
 						format!("`{}` is first used as a label here", label),
 					);
@@ -470,16 +470,21 @@ fn parse_labeled_statement(p: &mut JsParser, context: StatementContext) -> Parse
             Some(mut body) if context.is_single_statement() && body.kind(p) == JS_FUNCTION_DECLARATION => {
                 // test_err js labelled_function_decl_in_single_statement_context
                 // if (true) label1: label2: function a() {}
-                p.error(p.err_builder("Labelled function declarations are only allowed at top-level or inside a block", body.range(p)).hint( "Wrap the labelled statement in a block statement"));
+                p.error(p.err_builder("Labelled function declarations are only allowed at top-level or inside a block", body.range(p)).with_hint( "Wrap the labelled statement in a block statement"));
                 body.change_to_bogus(p);
             },
             // test js labelled_statement_in_single_statement_context
             // if (true) label1: var a = 10;
             _ => {}
         }
-
-        labelled_statement.complete(p, JS_LABELED_STATEMENT)
-    })
+        identifier
+    });
+    if x.is_absent() {
+        labelled_statement.abandon(p);
+        ParsedSyntax::Absent
+    } else {
+        ParsedSyntax::Present(labelled_statement.complete(p, JS_LABELED_STATEMENT))
+    }
 }
 
 // test js ts_keyword_assignments
@@ -555,10 +560,10 @@ fn parse_throw_statement(p: &mut JsParser) -> ParsedSyntax {
                 "Linebreaks between a throw statement and the error to be thrown are not allowed",
                 p.cur_range(),
             )
-            .hint("A linebreak is not allowed here");
+            .with_hint("A linebreak is not allowed here");
 
         if is_at_expression(p) {
-            err = err.detail(p.cur_range(), "Help: did you mean to throw this?");
+            err = err.with_detail(p.cur_range(), "Help: did you mean to throw this?");
         }
 
         p.error(err);
@@ -603,11 +608,10 @@ fn parse_break_statement(p: &mut JsParser) -> ParsedSyntax {
                     format!("Use of undefined statement label `{}`", label_name,),
                     p.cur_range(),
                 )
-                .hint("This label is used, but it is never defined"),
+                .with_hint("This label is used, but it is never defined"),
             ),
         };
-
-        p.bump_any();
+        let _ = parse_identifier(p, JS_LABEL);
         error
     } else if !p.state().break_allowed() {
         Some(p.err_builder("A `break` statement can only be used within an enclosing iteration or switch statement.", start, ))
@@ -660,8 +664,8 @@ fn parse_continue_statement(p: &mut JsParser) -> ParsedSyntax {
 			Some(LabelledItem::Iteration(_)) => None,
 			Some(LabelledItem::Other(range)) => {
 				Some(p.err_builder("A `continue` statement can only jump to a label of an enclosing `for`, `while` or `do while` statement.", p.cur_range())
-					.detail(p.cur_range(), "This label")
-					.detail(*range, "points to non-iteration statement"))
+					.with_detail(p.cur_range(), "This label")
+					.with_detail(*range, "points to non-iteration statement"))
 			}
 			None => {
 				Some(p
@@ -669,15 +673,14 @@ fn parse_continue_statement(p: &mut JsParser) -> ParsedSyntax {
 						"Use of undefined statement label `{}`",
 						label_name
 					), p.cur_range())
-					.hint(
+					.with_hint(
 
 						"This label is used, but it is never defined",
 					))
 			}
 		};
 
-        p.bump_remap(T![ident]);
-
+        let _ = parse_identifier(p, JS_LABEL);
         error
     } else if !p.state().continue_allowed() {
         Some(
@@ -900,9 +903,9 @@ pub(crate) fn parse_statements(p: &mut JsParser, stop_on_r_curly: bool, statemen
         }
 
         if parse_statement(p, StatementContext::StatementList)
-            .or_recover(
+            .or_recover_with_token_set(
                 p,
-                &ParseRecovery::new(JS_BOGUS_STATEMENT, recovery_set),
+                &ParseRecoveryTokenSet::new(JS_BOGUS_STATEMENT, recovery_set),
                 expected_statement,
             )
             .is_err()
@@ -1125,7 +1128,7 @@ pub(crate) fn parse_variable_statement(
                     "Lexical declaration cannot appear in a single-statement context",
                     statement.range(p),
                 )
-                .hint("Wrap this declaration in a block statement"),
+                .with_hint("Wrap this declaration in a block statement"),
             );
             statement.change_to_bogus(p);
         }
@@ -1142,7 +1145,7 @@ pub(crate) fn parse_variable_statement(
                     "`await using` declarations are only allowed at top-level or inside an async function",
                     statement.range(p),
                 )
-                .hint("Wrap this declaration in an async function"),
+                .with_hint("Wrap this declaration in an async function"),
             );
             statement.change_to_bogus(p);
         }
@@ -1267,9 +1270,9 @@ impl ParseSeparatedList for VariableDeclaratorList {
     }
 
     fn recover(&mut self, p: &mut JsParser, parsed_element: ParsedSyntax) -> RecoveryResult {
-        parsed_element.or_recover(
+        parsed_element.or_recover_with_token_set(
             p,
-            &ParseRecovery::new(JS_BOGUS, STMT_RECOVERY_SET.union(token_set!(T![,])))
+            &ParseRecoveryTokenSet::new(JS_BOGUS, STMT_RECOVERY_SET.union(token_set!(T![,])))
                 .enable_recovery_on_line_break(),
             expected_binding,
         )
@@ -1385,9 +1388,8 @@ fn parse_variable_declarator(
                     p
                         .err_builder("Declarations with initializers cannot also have definite assignment assertions.", initializer.range(p))
 
-                        .detail(ts_annotation.range(p), "Annotation")
+                        .with_detail(ts_annotation.range(p), "Annotation")
                 );
-                initializer.change_to_bogus(p);
             }
         }
 
@@ -1470,22 +1472,22 @@ fn parse_variable_declarator(
             )
         {
             let err = p
-                .err_builder("Object and Array patterns require initializers", id_range)
-                .hint(
-                    "this pattern is declared, but it is not given an initialized value",
+                .err_builder("Object and Array patterns require initializers.", id_range)
+                .with_hint(
+                    "This pattern is declared, but it is not given an initialized value.",
                 );
 
             p.error(err);
         } else if initializer.is_none() && context.is_const() && !p.state().in_ambient_context() {
             let err = p
-                .err_builder("Const declarations must have an initialized value", id_range)
-                .hint( "this variable needs to be initialized");
+                .err_builder("Const declarations must have an initialized value.", id_range)
+                .with_hint( "This variable needs to be initialized.");
 
             p.error(err);
         } else if initializer.is_none() && context.is_using() {
             let err = p
-                .err_builder("Using declarations must have an initialized value", id_range)
-                .hint( "this variable needs to be initialized");
+                .err_builder("Using declarations must have an initialized value.", id_range)
+                .with_hint( "This variable needs to be initialized.");
 
             p.error(err);
         }
@@ -1608,7 +1610,7 @@ fn parse_for_head(p: &mut JsParser, has_l_paren: bool, is_for_await: bool) -> Js
                         ),
                         additional_declarations_range,
                     )
-                    .hint("additional declarations"),
+                    .with_hint("additional declarations"),
                 );
             }
 
@@ -1768,8 +1770,8 @@ fn parse_for_statement(p: &mut JsParser) -> ParsedSyntax {
                     "await can only be used in conjunction with `for...of` statements",
                     await_range,
                 )
-                .detail(await_range, "Remove the await here")
-                .detail(
+                .with_detail(await_range, "Remove the await here")
+                .with_detail(
                     completed.range(p),
                     "or convert this to a `for...of` statement",
                 ),
@@ -1802,9 +1804,9 @@ impl ParseNodeList for SwitchCaseStatementList {
         p: &mut JsParser,
         parsed_element: ParsedSyntax,
     ) -> parser::RecoveryResult {
-        parsed_element.or_recover(
+        parsed_element.or_recover_with_token_set(
             p,
-            &ParseRecovery::new(JS_BOGUS_STATEMENT, STMT_RECOVERY_SET),
+            &ParseRecoveryTokenSet::new(JS_BOGUS_STATEMENT, STMT_RECOVERY_SET),
             js_parse_error::expected_case,
         )
     }
@@ -1836,8 +1838,8 @@ fn parse_switch_clause(p: &mut JsParser, first_default: &mut Option<TextRange>) 
                         "Multiple default clauses inside of a switch statement are not allowed",
                         default.range(p),
                     )
-                    .detail(default.range(p), "a second clause here is not allowed")
-                    .detail(
+                    .with_detail(default.range(p), "a second clause here is not allowed")
+                    .with_detail(
                         *first_default_range,
                         "the first default clause is defined here",
                     );
@@ -1896,9 +1898,9 @@ impl ParseNodeList for SwitchCasesList {
             let m = p.start();
             let statements = p.start();
 
-            let recovered_element = parsed_element.or_recover(
+            let recovered_element = parsed_element.or_recover_with_token_set(
                 p,
-                &ParseRecovery::new(
+                &ParseRecoveryTokenSet::new(
                     JS_BOGUS_STATEMENT,
                     token_set![T![default], T![case], T!['}']],
                 )

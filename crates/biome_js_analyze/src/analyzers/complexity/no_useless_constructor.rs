@@ -1,5 +1,6 @@
 use biome_analyze::{
     context::RuleContext, declare_rule, ActionCategory, Ast, FixKind, Rule, RuleDiagnostic,
+    RuleSource,
 };
 use biome_console::markup;
 use biome_diagnostics::Applicability;
@@ -17,7 +18,16 @@ declare_rule! {
     /// _ES2015_ provides a default class constructor if one is not specified.
     /// As such, providing an empty constructor or one that delegates into its parent is unnecessary.
     ///
-    /// Source: https://typescript-eslint.io/rules/no-useless-constructor
+    /// The rule ignores:
+    ///
+    /// - decorated classes;
+    /// - constructors with at least one [parameter property](https://www.typescriptlang.org/docs/handbook/classes.html#parameter-properties);
+    /// - `private` and `protected` constructors.
+    ///
+    /// ## Caveat
+    ///
+    /// This rule reports on constructors whose sole purpose is to make a parent constructor public.
+    /// See the last invalid example.
     ///
     /// ## Examples
     ///
@@ -46,7 +56,22 @@ declare_rule! {
     /// }
     /// ```
     ///
-    /// ## Valid
+    /// ```js,expect_diagnostic
+    /// class A {
+    ///     protected constructor() {
+    ///         this.prop = 1;
+    ///     }
+    /// }
+    ///
+    /// class B extends A {
+    ///     // Make the parent constructor public.
+    ///     constructor () {
+    ///         super();
+    ///     }
+    /// }
+    /// ```
+    ///
+    /// ### Valid
     ///
     /// ```js
     /// class A {
@@ -80,6 +105,7 @@ declare_rule! {
     pub(crate) NoUselessConstructor {
         version: "1.0.0",
         name: "noUselessConstructor",
+        source: RuleSource::EslintTypeScript("no-useless-constructor"),
         recommended: true,
         fix_kind: FixKind::Unsafe,
     }

@@ -1,10 +1,9 @@
 ---
 source: crates/biome_js_analyze/tests/spec_tests.rs
-assertion_line: 80
 expression: valid-declaration-merging.ts
 ---
 # Input
-```js
+```ts
 // Type and value merging
 export type Order = -1 | 0 | 1;
 export const Order = {
@@ -114,6 +113,19 @@ export enum Orientation2 {
 export enum Orientation2 {
 	East = 2,
 	West = 3,
+}
+
+// overloads
+function f(a: boolean): boolean;
+function f(a: number): number;
+function f(a: number | boolean): number | boolean {
+	return a;
+}
+
+export default function(a: boolean): boolean;
+export default function(a: number): number;
+export default function(a: number | boolean): number | boolean {
+	return a;
 }
 
 ```

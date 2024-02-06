@@ -2,11 +2,13 @@
 title: noInvalidNewBuiltin (since v1.3.0)
 ---
 
-**Diagnostic Category: `lint/nursery/noInvalidNewBuiltin`**
+**Diagnostic Category: `lint/correctness/noInvalidNewBuiltin`**
 
-:::caution
-This rule is part of the [nursery](/linter/rules/#nursery) group.
+:::note
+This rule is recommended by Biome. A diagnostic error will appear when linting your code.
 :::
+
+Source: <a href="https://eslint.org/docs/latest/rules/no-new-native-nonconstructor" target="_blank"><code>no-new-native-nonconstructor</code></a>
 
 Disallow `new` operators with global non-constructor functions.
 
@@ -16,8 +18,6 @@ will throw a `TypeError` if you attempt to do so. These functions are:
 - [`Symbol`](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Symbol/Symbol)
 - [`BigInt`](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/BigInt/BigInt)
 
-Source: https://eslint.org/docs/latest/rules/no-new-native-nonconstructor/
-
 ## Examples
 
 ### Invalid
@@ -26,7 +26,7 @@ Source: https://eslint.org/docs/latest/rules/no-new-native-nonconstructor/
 let foo = new Symbol('foo');
 ```
 
-<pre class="language-text"><code class="language-text">nursery/noInvalidNewBuiltin.js:1:11 <a href="https://biomejs.dev/lint/rules/no-invalid-new-builtin">lint/nursery/noInvalidNewBuiltin</a> <span style="color: #000; background-color: #ddd;"> FIXABLE </span> ━━━━━━━━━━━━━━━━━━━━━
+<pre class="language-text"><code class="language-text">correctness/noInvalidNewBuiltin.js:1:11 <a href="https://biomejs.dev/linter/rules/no-invalid-new-builtin">lint/correctness/noInvalidNewBuiltin</a> <span style="color: #000; background-color: #ddd;"> FIXABLE </span> ━━━━━━━━━━━━━
 
 <strong><span style="color: Tomato;">  </span></strong><strong><span style="color: Tomato;">✖</span></strong> <span style="color: Tomato;"><strong>Symbol</strong></span><span style="color: Tomato;"> cannot be called as a constructor.</span>
   
@@ -46,7 +46,7 @@ let foo = new Symbol('foo');
 let bar = new BigInt(9007199254740991);
 ```
 
-<pre class="language-text"><code class="language-text">nursery/noInvalidNewBuiltin.js:1:11 <a href="https://biomejs.dev/lint/rules/no-invalid-new-builtin">lint/nursery/noInvalidNewBuiltin</a> <span style="color: #000; background-color: #ddd;"> FIXABLE </span> ━━━━━━━━━━━━━━━━━━━━━
+<pre class="language-text"><code class="language-text">correctness/noInvalidNewBuiltin.js:1:11 <a href="https://biomejs.dev/linter/rules/no-invalid-new-builtin">lint/correctness/noInvalidNewBuiltin</a> <span style="color: #000; background-color: #ddd;"> FIXABLE </span> ━━━━━━━━━━━━━
 
 <strong><span style="color: Tomato;">  </span></strong><strong><span style="color: Tomato;">✖</span></strong> <span style="color: Tomato;"><strong>BigInt</strong></span><span style="color: Tomato;"> cannot be called as a constructor.</span>
   
@@ -62,7 +62,7 @@ let bar = new BigInt(9007199254740991);
 <strong>  </strong><strong>    │ </strong>          <span style="color: Tomato;">-</span><span style="color: Tomato;">-</span><span style="color: Tomato;">-</span><span style="color: Tomato;">-</span>                         
 </code></pre>
 
-## Valid
+### Valid
 
 ```jsx
 let foo = Symbol('foo');

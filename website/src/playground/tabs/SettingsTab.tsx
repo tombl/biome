@@ -1,7 +1,9 @@
 import type { Dispatch, SetStateAction } from "react";
-import React, { useState } from "react";
+import type React from "react";
+import { useState } from "react";
 import {
 	ArrowParentheses,
+	AttributePosition,
 	IndentStyle,
 	LintRules,
 	type PlaygroundState,
@@ -45,11 +47,14 @@ export default function SettingsTab({
 			trailingComma,
 			semicolons,
 			arrowParentheses,
+			bracketSpacing,
+			bracketSameLine,
 			lintRules,
 			enabledLinting,
 			importSortingEnabled,
 			unsafeParameterDecoratorsEnabled,
 			allowComments,
+			attributePosition,
 		},
 	},
 }: SettingsTabProps) {
@@ -88,6 +93,18 @@ export default function SettingsTab({
 	const setArrowParentheses = createPlaygroundSettingsSetter(
 		setPlaygroundState,
 		"arrowParentheses",
+	);
+	const setAttributePosition = createPlaygroundSettingsSetter(
+		setPlaygroundState,
+		"attributePosition",
+	);
+	const setBracketSpacing = createPlaygroundSettingsSetter(
+		setPlaygroundState,
+		"bracketSpacing",
+	);
+	const setBracketSameLine = createPlaygroundSettingsSetter(
+		setPlaygroundState,
+		"bracketSameLine",
 	);
 	const setLintRules = createPlaygroundSettingsSetter(
 		setPlaygroundState,
@@ -252,6 +269,12 @@ export default function SettingsTab({
 				setSemicolons={setSemicolons}
 				arrowParentheses={arrowParentheses}
 				setArrowParentheses={setArrowParentheses}
+				attributePosition={attributePosition}
+				setAttributePosition={setAttributePosition}
+				bracketSpacing={bracketSpacing}
+				setBracketSpacing={setBracketSpacing}
+				bracketSameLine={bracketSameLine}
+				setBracketSameLine={setBracketSameLine}
 			/>
 			<LinterSettings
 				lintRules={lintRules}
@@ -581,6 +604,12 @@ function FormatterSettings({
 	setSemicolons,
 	arrowParentheses,
 	setArrowParentheses,
+	attributePosition,
+	setAttributePosition,
+	bracketSpacing,
+	setBracketSpacing,
+	bracketSameLine,
+	setBracketSameLine,
 }: {
 	lineWidth: number;
 	setLineWidth: (value: number) => void;
@@ -600,6 +629,12 @@ function FormatterSettings({
 	setSemicolons: (value: Semicolons) => void;
 	arrowParentheses: ArrowParentheses;
 	setArrowParentheses: (value: ArrowParentheses) => void;
+	attributePosition: AttributePosition;
+	setAttributePosition: (value: AttributePosition) => void;
+	bracketSpacing: boolean;
+	setBracketSpacing: (value: boolean) => void;
+	bracketSameLine: boolean;
+	setBracketSameLine: (value: boolean) => void;
 }) {
 	return (
 		<>
@@ -630,7 +665,7 @@ function FormatterSettings({
 						id="indentWidth"
 						value={indentWidth}
 						onChange={(e) => {
-							setIndentWidth(parseInt(e.target.value));
+							setIndentWidth(Number.parseInt(e.target.value));
 						}}
 					/>
 				</div>
@@ -716,6 +751,40 @@ function FormatterSettings({
 						<option value={ArrowParentheses.Always}>Always</option>
 						<option value={ArrowParentheses.AsNeeded}>As needed</option>
 					</select>
+				</div>
+				<div className="field-row">
+					<label htmlFor="arrowParentheses">Attribute Position</label>
+					<select
+						id="attributePosition"
+						name="attributePosition"
+						value={attributePosition ?? AttributePosition.Auto}
+						onChange={(e) =>
+							setAttributePosition(e.target.value as AttributePosition)
+						}
+					>
+						<option value={AttributePosition.Auto}>Auto</option>
+						<option value={AttributePosition.Multiline}>Multiline</option>
+					</select>
+				</div>
+				<div className="field-row">
+					<label htmlFor="bracketSpacing">Bracket Spacing</label>
+					<input
+						id="bracketSpacing"
+						name="bracketSpacing"
+						type="checkbox"
+						checked={bracketSpacing}
+						onChange={(e) => setBracketSpacing(e.target.checked)}
+					/>
+				</div>
+				<div className="field-row">
+					<label htmlFor="bracketSameLine">Bracket Same Line</label>
+					<input
+						id="bracketSameLine"
+						name="bracketSameLine"
+						type="checkbox"
+						checked={bracketSameLine}
+						onChange={(e) => setBracketSameLine(e.target.checked)}
+					/>
 				</div>
 			</section>
 		</>
@@ -860,7 +929,7 @@ function LineWidthInput({
 							id="lineWidth"
 							value={lineWidth}
 							onChange={(e) => {
-								setLineWidth(parseInt(e.target.value));
+								setLineWidth(Number.parseInt(e.target.value));
 							}}
 						/>
 					)}

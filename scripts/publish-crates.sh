@@ -12,7 +12,7 @@ set -eo pipefail
 published_crates=(
   "biome_diagnostics_categories"
   "biome_diagnostics_macros"
-  "biome_js_unicode_table"
+  "biome_unicode_table"
   "biome_markup"
   "biome_text_size"
   "biome_console"
@@ -22,7 +22,6 @@ published_crates=(
   "biome_aria"
   "biome_diagnostics"
   "biome_analyze"
-  "biome_formatter"
   "biome_fs"
   "biome_parser"
   "biome_control_flow"
@@ -37,12 +36,14 @@ published_crates=(
   "biome_css_factory"
   "biome_css_parser"
   "biome_deserialize"
+  "biome_formatter"
   "biome_js_semantic"
   "biome_js_analyze"
   "biome_js_formatter"
   "biome_js_transform"
   "biome_json_analyze"
   "biome_json_formatter"
+  "biome_css_formatter"
 )
 
 for crate in "${published_crates[@]}"; do

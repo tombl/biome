@@ -1,6 +1,5 @@
 use super::{ExtensionHandler, Mime};
-use crate::configuration::to_analyzer_rules;
-use crate::file_handlers::javascript::JsonParserSettings;
+use crate::configuration::{to_analyzer_rules, PartialConfiguration};
 use crate::file_handlers::{
     AnalyzerCapabilities, Capabilities, FixAllParams, FormatterCapabilities, LintParams,
     LintResults, ParserCapabilities,
@@ -13,11 +12,13 @@ use crate::settings::{
 use crate::workspace::{
     FixFileResult, GetSyntaxTreeResult, OrganizeImportsResult, PullActionsResult,
 };
-use crate::{Configuration, Rules, WorkspaceError};
-use biome_analyze::{AnalyzerConfiguration, AnalyzerOptions, ControlFlow, Never, RuleCategories};
+use crate::{Rules, WorkspaceError};
+use biome_analyze::{
+    AnalysisFilter, AnalyzerConfiguration, AnalyzerOptions, ControlFlow, Never, RuleCategories,
+};
 use biome_deserialize::json::deserialize_from_json_ast;
 use biome_diagnostics::{category, Diagnostic, DiagnosticExt, Severity};
-use biome_formatter::{FormatError, IndentStyle, IndentWidth, LineWidth, Printed};
+use biome_formatter::{FormatError, IndentStyle, IndentWidth, LineEnding, LineWidth, Printed};
 use biome_fs::{RomePath, BIOME_JSON, ROME_JSON};
 use biome_json_analyze::analyze;
 use biome_json_formatter::context::JsonFormatOptions;
@@ -32,10 +33,18 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct JsonFormatterSettings {
+    pub line_ending: Option<LineEnding>,
     pub line_width: Option<LineWidth>,
     pub indent_width: Option<IndentWidth>,
     pub indent_style: Option<IndentStyle>,
     pub enabled: Option<bool>,
+}
+
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct JsonParserSettings {
+    pub allow_comments: bool,
+    pub allow_trailing_commas: bool,
 }
 
 impl Language for JsonLanguage {
@@ -54,27 +63,36 @@ impl Language for JsonLanguage {
         language: &Self::FormatterSettings,
         path: &RomePath,
     ) -> Self::FormatOptions {
-        overrides.as_json_format_options(path).unwrap_or_else(|| {
-            let indent_style = if let Some(indent_style) = language.indent_style {
-                indent_style
-            } else {
-                global.indent_style.unwrap_or_default()
-            };
-            let line_width = if let Some(line_width) = language.line_width {
-                line_width
-            } else {
-                global.line_width.unwrap_or_default()
-            };
-            let indent_width = if let Some(indent_width) = language.indent_width {
-                indent_width
-            } else {
-                global.indent_width.unwrap_or_default()
-            };
+        let indent_style = if let Some(indent_style) = language.indent_style {
+            indent_style
+        } else {
+            global.indent_style.unwrap_or_default()
+        };
+        let line_width = if let Some(line_width) = language.line_width {
+            line_width
+        } else {
+            global.line_width.unwrap_or_default()
+        };
+        let indent_width = if let Some(indent_width) = language.indent_width {
+            indent_width
+        } else {
+            global.indent_width.unwrap_or_default()
+        };
+
+        let line_ending = if let Some(line_ending) = language.line_ending {
+            line_ending
+        } else {
+            global.line_ending.unwrap_or_default()
+        };
+
+        overrides.override_json_format_options(
+            path,
             JsonFormatOptions::new(path.as_path().try_into().unwrap_or_default())
+                .with_line_ending(line_ending)
                 .with_indent_style(indent_style)
                 .with_indent_width(indent_width)
-                .with_line_width(line_width)
-        })
+                .with_line_width(line_width),
+        )
     }
 }
 
@@ -121,7 +139,11 @@ impl ExtensionHandler for JsonFileHandler {
 fn is_file_allowed(path: &Path) -> bool {
     path.file_name()
         .and_then(|f| f.to_str())
-        .map(|f| super::Language::ALLOWED_FILES.contains(&f))
+        .map(|f| {
+            super::Language::KNOWN_FILES_AS_JSONC
+                .binary_search(&f)
+                .is_ok()
+        })
         // default is false
         .unwrap_or_default()
 }
@@ -184,7 +206,7 @@ fn debug_formatter_ir(
     Ok(root_element.to_string())
 }
 
-#[tracing::instrument(level = "debug", skip(parse))]
+#[tracing::instrument(level = "debug", skip(parse, settings))]
 fn format(
     rome_path: &RomePath,
     parse: AnyParse,
@@ -252,96 +274,103 @@ fn format_on_type(
     Ok(printed)
 }
 fn lint(params: LintParams) -> LintResults {
-    tracing::debug_span!("lint").in_scope(move || {
-        let root: JsonRoot = params.parse.tree();
-        let mut diagnostics = params.parse.into_diagnostics();
+    tracing::debug_span!("Linting JSON file", path =? params.path, language =? params.language)
+        .in_scope(move || {
+            let root: JsonRoot = params.parse.tree();
+            let mut diagnostics = params.parse.into_diagnostics();
+            let settings = params.settings.as_ref();
 
-        // if we're parsing the `biome.json` file, we deserialize it, so we can emit diagnostics for
-        // malformed configuration
-        if params.path.ends_with(ROME_JSON) || params.path.ends_with(BIOME_JSON) {
-            let deserialized = deserialize_from_json_ast::<Configuration>(&root);
+            // if we're parsing the `biome.json` file, we deserialize it, so we can emit diagnostics for
+            // malformed configuration
+            if params.path.ends_with(ROME_JSON) || params.path.ends_with(BIOME_JSON) {
+                let deserialized = deserialize_from_json_ast::<PartialConfiguration>(&root, "");
+                diagnostics.extend(
+                    deserialized
+                        .into_diagnostics()
+                        .into_iter()
+                        .map(biome_diagnostics::serde::Diagnostic::new)
+                        .collect::<Vec<_>>(),
+                );
+            }
+
+            let mut diagnostic_count = diagnostics.len() as u64;
+            let mut errors = diagnostics
+                .iter()
+                .filter(|diag| diag.severity() <= Severity::Error)
+                .count();
+
+            let skipped_diagnostics = diagnostic_count - diagnostics.len() as u64;
+
+            let rules = settings.as_rules(params.path.as_path());
+            let rule_filter_list = rules
+                .as_ref()
+                .map(|rules| rules.as_enabled_rules())
+                .unwrap_or_default()
+                .into_iter()
+                .collect::<Vec<_>>();
+
+            let analyzer_options =
+                compute_analyzer_options(&params.settings, PathBuf::from(params.path.as_path()));
+            let mut filter = AnalysisFilter::from_enabled_rules(Some(rule_filter_list.as_slice()));
+            filter.categories = params.categories;
+            let has_lint = filter.categories.contains(RuleCategories::LINT);
+
+            let (_, analyze_diagnostics) = analyze(&root, filter, &analyzer_options, |signal| {
+                if let Some(mut diagnostic) = signal.diagnostic() {
+                    // Do not report unused suppression comment diagnostics if this is a syntax-only analyzer pass
+                    if !has_lint && diagnostic.category() == Some(category!("suppressions/unused"))
+                    {
+                        return ControlFlow::<Never>::Continue(());
+                    }
+
+                    diagnostic_count += 1;
+
+                    // We do now check if the severity of the diagnostics should be changed.
+                    // The configuration allows to change the severity of the diagnostics emitted by rules.
+                    let severity = diagnostic
+                        .category()
+                        .filter(|category| category.name().starts_with("lint/"))
+                        .map(|category| {
+                            rules
+                                .as_ref()
+                                .and_then(|rules| rules.get_severity_from_code(category))
+                                .unwrap_or(Severity::Warning)
+                        })
+                        .unwrap_or_else(|| diagnostic.severity());
+
+                    if severity <= Severity::Error {
+                        errors += 1;
+                    }
+
+                    if diagnostic_count <= params.max_diagnostics {
+                        for action in signal.actions() {
+                            if !action.is_suppression() {
+                                diagnostic = diagnostic.add_code_suggestion(action.into());
+                            }
+                        }
+
+                        let error = diagnostic.with_severity(severity);
+
+                        diagnostics.push(biome_diagnostics::serde::Diagnostic::new(error));
+                    }
+                }
+
+                ControlFlow::<Never>::Continue(())
+            });
+
             diagnostics.extend(
-                deserialized
-                    .into_diagnostics()
+                analyze_diagnostics
                     .into_iter()
                     .map(biome_diagnostics::serde::Diagnostic::new)
                     .collect::<Vec<_>>(),
             );
-        }
 
-        let mut diagnostic_count = diagnostics.len() as u64;
-        let mut errors = diagnostics
-            .iter()
-            .filter(|diag| diag.severity() <= Severity::Error)
-            .count();
-
-        let skipped_diagnostics = diagnostic_count - diagnostics.len() as u64;
-
-        let has_lint = params.filter.categories.contains(RuleCategories::LINT);
-        let analyzer_options =
-            compute_analyzer_options(&params.settings, PathBuf::from(params.path.as_path()));
-        let Ok(value) = &root.value() else {
-            return LintResults {
+            LintResults {
                 diagnostics,
                 errors,
                 skipped_diagnostics,
-            };
-        };
-        let (_, analyze_diagnostics) = analyze(value, params.filter, &analyzer_options, |signal| {
-            if let Some(mut diagnostic) = signal.diagnostic() {
-                // Do not report unused suppression comment diagnostics if this is a syntax-only analyzer pass
-                if !has_lint && diagnostic.category() == Some(category!("suppressions/unused")) {
-                    return ControlFlow::<Never>::Continue(());
-                }
-
-                diagnostic_count += 1;
-
-                // We do now check if the severity of the diagnostics should be changed.
-                // The configuration allows to change the severity of the diagnostics emitted by rules.
-                let severity = diagnostic
-                    .category()
-                    .filter(|category| category.name().starts_with("lint/"))
-                    .map(|category| {
-                        params
-                            .rules
-                            .and_then(|rules| rules.get_severity_from_code(category))
-                            .unwrap_or(Severity::Warning)
-                    })
-                    .unwrap_or_else(|| diagnostic.severity());
-
-                if severity <= Severity::Error {
-                    errors += 1;
-                }
-
-                if diagnostic_count <= params.max_diagnostics {
-                    for action in signal.actions() {
-                        if !action.is_suppression() {
-                            diagnostic = diagnostic.add_code_suggestion(action.into());
-                        }
-                    }
-
-                    let error = diagnostic.with_severity(severity);
-
-                    diagnostics.push(biome_diagnostics::serde::Diagnostic::new(error));
-                }
             }
-
-            ControlFlow::<Never>::Continue(())
-        });
-
-        diagnostics.extend(
-            analyze_diagnostics
-                .into_iter()
-                .map(biome_diagnostics::serde::Diagnostic::new)
-                .collect::<Vec<_>>(),
-        );
-
-        LintResults {
-            diagnostics,
-            errors,
-            skipped_diagnostics,
-        }
-    })
+        })
 }
 fn code_actions(
     _parse: AnyParse,

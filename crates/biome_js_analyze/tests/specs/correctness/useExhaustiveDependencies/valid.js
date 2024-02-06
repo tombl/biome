@@ -1,13 +1,25 @@
 /* should not generate diagnostics */
 
 import React from "react";
-import { useEffect } from "react";
+import {
+	useEffect,
+	useSyncExternalStore,
+	useRef,
+	useState,
+	useContext,
+	useReducer,
+	useCallback,
+	useMemo,
+	useTransition,
+	useId,
+} from "react";
+import { useRef as uR } from "react"
 import doSomething from 'a';
 
 // No captures
 function MyComponent1() {
     useEffect(() => {
-    });
+    }, []);
 }
 
 // All needed captures in the dependency list
@@ -62,7 +74,7 @@ function MyComponent4() {
         console.log(id);
 
         console.log(externalStore);
-    }, [name, state, memoizedCallback, memoizedValue, isPending]);
+    }, [name, state, memoizedCallback, memoizedValue, isPending, externalStore, id, theme]);
 }
 
 // all hooks with dependencies
@@ -96,17 +108,23 @@ function MyComponent6() {
 function MyComponent7() {
     let someObj = getObj();
     useEffect(() => {
-        console.log(someObj.name);
-        console.log(someObj.age)
+        console.log(
+					someObj
+							.name
+				);
+        console.log(someObj["age"])
     }, [someObj.name, someObj.age]);
 }
 
 // Specified dependency cover captures
 function MyComponent8({ a }) {
     useEffect(() => {
-      console.log(a.b);
+      console.log(
+				a
+			  		.b
+			);
     }, [a]);
-}
+}l
 
 // Capturing const outside of component
 // https://github.com/rome/tools/issues/3727
@@ -114,20 +132,20 @@ const outside = f();
 function MyComponent9() {
     useEffect(() => {
       console.log(outside);
-    });
+    }, []);
 }
 
 // Memoized Components
 const MyComponent10 = React.memo(function () {
     useEffect(() => {
         console.log(outside);
-    });
+    }, []);
 });
 
 const MyComponent11 = React.memo(() => {
     useEffect(() => {
         console.log(outside);
-    });
+    }, []);
 });
 
 // exported functions
@@ -166,4 +184,72 @@ function MyComponent16() {
     React.useEffect(() => {
         console.log(a);
     }, [a]);
+}
+
+// https://github.com/biomejs/biome/issues/609
+function MyComponent17() {
+  const data = useSyncExternalStore(subscribe, getSnapshot);
+
+  useEffect(() => {
+    console.log(data);
+  }, [data]);
+}
+
+// https://github.com/biomejs/biome/issues/607
+function MyComponent18() {
+  const obj = Math.random() > 0.5 ? { a: 1, b: 2 } : undefined;
+
+  return useMemo(() => {
+    return obj?.a === 1 && obj.b === 2;
+  }, [obj?.a, obj?.b]);
+}
+
+// Captures without dependency array
+// https://github.com/biomejs/biome/issues/608
+function MyComponent19() {
+    let a = 1;
+    useEffect(() => {
+        console.log(a);
+    });
+}
+
+// Namespaced imports
+// https://github.com/biomejs/biome/issues/578
+function MyComponent20() {
+	const ref = React.useRef()
+	React.useEffect(() => {
+		console.log(ref.current)
+	}, [])
+}
+
+// Aliased imports
+function MyComponent21() {
+	const ref = uR()
+	useEffect(() => {
+			console.log(ref.current)
+	}, [])
+}
+
+let outer = false;
+
+// Capture from outer scope
+// https://github.com/biomejs/biome/issues/651
+function MyComponent22() {
+  useEffect(() => {
+    outer = true;
+  }, [])
+}
+
+// Dynamic computed property access
+// https://github.com/biomejs/biome/issues/1637
+function MyComponent23 ({ arr })  {
+  useMemo(() => {
+    for (let i = 0; i < arr.length; i++) {
+       if (i + 1 === arr.length) {
+          // Do something with the last item
+       } else {
+           const _nextItem = arr[i + 1]
+       }
+    }
+  }, [arr])
 }

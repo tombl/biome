@@ -14,7 +14,7 @@ Global options applied to all commands
                               "force" forces the formatting of markup using ANSI even if the console
                               output is determined to be incompatible
         --use-server          Connect to a running instance of the Biome daemon server.
-        --verbose             Print additional verbose advices on diagnostics
+        --verbose             Print additional diagnostics, and some diagnostics show more information.
         --config-path=PATH    Set the filesystem path to the directory of the biome.json configuration
                               file
         --max-diagnostics=NUMBER  Cap the amount of diagnostics displayed.
@@ -29,6 +29,10 @@ Global options applied to all commands
                               [default: none]
         --log-kind=<pretty|compact|json>  How the log should look like.
                               [default: pretty]
+        --diagnostic-level=<info|warn|error>  The level of diagnostics to show. In order, from the lowest
+                              to the most important: info, warn, error. Passing `--diagnostic-level=error`
+                              will cause Biome to print only diagnostics that contain only errors.
+                              [default: info]
 
 Available options:
         --daemon-logs         Prints the Biome daemon server logs

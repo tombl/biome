@@ -3,7 +3,7 @@ use crate::prelude::*;
 use crate::syntax::expr::{parse_assignment_expression_or_higher, ExpressionContext};
 use crate::syntax::js_parse_error;
 use crate::ParsedSyntax::{Absent, Present};
-use crate::{JsParser, ParseRecovery, ParsedSyntax};
+use crate::{JsParser, ParseRecoveryTokenSet, ParsedSyntax};
 use biome_js_syntax::JsSyntaxKind::{EOF, JS_ARRAY_HOLE};
 use biome_js_syntax::{JsSyntaxKind, TextRange, T};
 use biome_parser::ParserProgress;
@@ -73,7 +73,7 @@ pub(crate) trait ParseArrayPattern<P: ParseWithDefaultPattern> {
             while !p.at(EOF) && !p.at(T![']']) {
                 progress.assert_progressing(p);
 
-                let recovery = ParseRecovery::new(
+                let recovery = ParseRecoveryTokenSet::new(
                     Self::bogus_pattern_kind(),
                     token_set!(EOF, T![,], T![']'], T![=], T![;], T![...], T![')']),
                 )
@@ -82,7 +82,7 @@ pub(crate) trait ParseArrayPattern<P: ParseWithDefaultPattern> {
                 let element = self.parse_any_array_element(p, &recovery);
 
                 if element
-                    .or_recover(p, &recovery, Self::expected_element_error)
+                    .or_recover_with_token_set(p, &recovery, Self::expected_element_error)
                     .is_err()
                 {
                     // Failed to recover
@@ -105,7 +105,7 @@ pub(crate) trait ParseArrayPattern<P: ParseWithDefaultPattern> {
     fn parse_any_array_element(
         &self,
         p: &mut JsParser,
-        recovery: &ParseRecovery<JsSyntaxKind>,
+        recovery: &ParseRecoveryTokenSet<JsSyntaxKind>,
     ) -> ParsedSyntax {
         match p.cur() {
             T![,] => Present(p.start().complete(p, JS_ARRAY_HOLE)),
@@ -170,7 +170,7 @@ pub(crate) trait ParseObjectPattern {
                 p.bump_any(); // bump ,
                 continue;
             }
-            let recovery_set = ParseRecovery::new(
+            let recovery_set = ParseRecoveryTokenSet::new(
                 Self::bogus_pattern_kind(),
                 token_set!(EOF, T![,], T!['}'], T![...], T![;], T![')'], T![=]),
             )
@@ -179,7 +179,7 @@ pub(crate) trait ParseObjectPattern {
             let pattern = self.parse_any_property_pattern(p, &recovery_set);
 
             if pattern
-                .or_recover(p, &recovery_set, Self::expected_property_pattern_error)
+                .or_recover_with_token_set(p, &recovery_set, Self::expected_property_pattern_error)
                 .is_err()
             {
                 break;
@@ -200,7 +200,7 @@ pub(crate) trait ParseObjectPattern {
     fn parse_any_property_pattern(
         &self,
         p: &mut JsParser,
-        recovery: &ParseRecovery<JsSyntaxKind>,
+        recovery: &ParseRecoveryTokenSet<JsSyntaxKind>,
     ) -> ParsedSyntax {
         if p.at(T![...]) {
             self.parse_rest_property_pattern(p)
@@ -228,7 +228,7 @@ fn validate_rest_pattern(
     p: &mut JsParser,
     mut rest: CompletedMarker,
     end_token: JsSyntaxKind,
-    recovery: &ParseRecovery<JsSyntaxKind>,
+    recovery: &ParseRecoveryTokenSet<JsSyntaxKind>,
 ) -> CompletedMarker {
     if p.at(end_token) {
         return rest;
@@ -249,11 +249,11 @@ fn validate_rest_pattern(
                 "rest element cannot have a default",
                 default_start..p.cur_range().start(),
             )
-            .detail(
+            .with_detail(
                 default_start..p.cur_range().start(),
                 "Remove the default value here",
             )
-            .detail(rest_range, "Rest element"),
+            .with_detail(rest_range, "Rest element"),
         );
 
         let mut invalid = rest_marker.complete(p, kind);
@@ -262,15 +262,15 @@ fn validate_rest_pattern(
     } else if p.at(T![,]) && p.nth_at(1, end_token) {
         p.error(
             p.err_builder("rest element may not have a trailing comma", p.cur_range())
-                .detail(p.cur_range(), "Remove the trailing comma here")
-                .detail(rest.range(p), "Rest element"),
+                .with_detail(p.cur_range(), "Remove the trailing comma here")
+                .with_detail(rest.range(p), "Rest element"),
         );
         rest.change_to_bogus(p);
         rest
     } else {
         p.error(
             p.err_builder("rest element must be the last element", rest.range(p),)
-                .hint(
+                .with_hint(
                     format!(
                     "Move the rest element to the end of the pattern, right before the closing '{}'",
                     end_token.to_string().unwrap(),

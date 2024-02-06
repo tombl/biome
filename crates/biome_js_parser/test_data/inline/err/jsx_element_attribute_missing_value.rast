@@ -1,4 +1,5 @@
 JsModule {
+    bom_token: missing (optional),
     interpreter_token: missing (optional),
     directives: JsDirectiveList [],
     items: JsModuleItemList [
@@ -66,8 +67,9 @@ JsModule {
 
 0: JS_MODULE@0..58
   0: (empty)
-  1: JS_DIRECTIVE_LIST@0..0
-  2: JS_MODULE_ITEM_LIST@0..57
+  1: (empty)
+  2: JS_DIRECTIVE_LIST@0..0
+  3: JS_MODULE_ITEM_LIST@0..57
     0: JS_FUNCTION_DECLARATION@0..57
       0: (empty)
       1: FUNCTION_KW@0..9 "function" [] [Whitespace(" ")]
@@ -110,11 +112,11 @@ JsModule {
                   3: R_ANGLE@53..54 ">" [] []
             2: SEMICOLON@54..55 ";" [] []
         3: R_CURLY@55..57 "}" [Newline("\n")] []
-  3: EOF@57..58 "" [Newline("\n")] []
+  4: EOF@57..58 "" [Newline("\n")] []
 --
 jsx_element_attribute_missing_value.jsx:2:33 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  × expected a JSX attribute value but instead found '>'
+  × Expected a JSX attribute value but instead found '>'.
   
     1 │ function f() {
   > 2 │     return <div string_literal= ></div>;
@@ -122,7 +124,7 @@ jsx_element_attribute_missing_value.jsx:2:33 parse ━━━━━━━━━�
     3 │ }
     4 │ 
   
-  i Expected a JSX attribute value here
+  i Expected a JSX attribute value here.
   
     1 │ function f() {
   > 2 │     return <div string_literal= ></div>;

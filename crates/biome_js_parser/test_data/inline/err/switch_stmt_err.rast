@@ -1,4 +1,5 @@
 JsModule {
+    bom_token: missing (optional),
     interpreter_token: missing (optional),
     directives: JsDirectiveList [],
     items: JsModuleItemList [
@@ -156,8 +157,9 @@ JsModule {
 
 0: JS_MODULE@0..151
   0: (empty)
-  1: JS_DIRECTIVE_LIST@0..0
-  2: JS_MODULE_ITEM_LIST@0..150
+  1: (empty)
+  2: JS_DIRECTIVE_LIST@0..0
+  3: JS_MODULE_ITEM_LIST@0..150
     0: JS_SWITCH_STATEMENT@0..13
       0: SWITCH_KW@0..7 "switch" [] [Whitespace(" ")]
       1: (empty)
@@ -266,7 +268,7 @@ JsModule {
           2: COLON@147..149 ":" [] [Whitespace(" ")]
           3: JS_STATEMENT_LIST@149..149
       6: R_CURLY@149..150 "}" [] []
-  3: EOF@150..151 "" [Newline("\n")] []
+  4: EOF@150..151 "" [Newline("\n")] []
 --
 switch_stmt_err.js:1:8 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -321,7 +323,7 @@ switch_stmt_err.js:3:8 parse ━━━━━━━━━━━━━━━━━
 --
 switch_stmt_err.js:3:10 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  × expected a default, or a case but instead found 'var i = 0'
+  × Expected a default, or a case but instead found 'var i = 0'.
   
     1 │ switch foo {}
     2 │ switch {}
@@ -330,7 +332,7 @@ switch_stmt_err.js:3:10 parse ━━━━━━━━━━━━━━━━�
     4 │ switch { var i = 0; case "bar": {} }
     5 │ switch (foo) {
   
-  i Expected a default, or a case here
+  i Expected a default, or a case here.
   
     1 │ switch foo {}
     2 │ switch {}
@@ -356,7 +358,7 @@ switch_stmt_err.js:4:8 parse ━━━━━━━━━━━━━━━━━
 --
 switch_stmt_err.js:4:10 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  × expected a default, or a case but instead found 'var i = 0;'
+  × Expected a default, or a case but instead found 'var i = 0;'.
   
     2 │ switch {}
     3 │ switch { var i = 0 }
@@ -365,7 +367,7 @@ switch_stmt_err.js:4:10 parse ━━━━━━━━━━━━━━━━�
     5 │ switch (foo) {
     6 │   default: {}
   
-  i Expected a default, or a case here
+  i Expected a default, or a case here.
   
     2 │ switch {}
     3 │ switch { var i = 0 }
@@ -407,7 +409,7 @@ switch_stmt_err.js:7:3 parse ━━━━━━━━━━━━━━━━━
 --
 switch_stmt_err.js:9:21 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  × expected an expression but instead found ':'
+  × Expected an expression but instead found ':'.
   
      7 │   default: {}
      8 │ }
@@ -415,7 +417,7 @@ switch_stmt_err.js:9:21 parse ━━━━━━━━━━━━━━━━�
        │                     ^
     10 │ 
   
-  i Expected an expression here
+  i Expected an expression here.
   
      7 │   default: {}
      8 │ }

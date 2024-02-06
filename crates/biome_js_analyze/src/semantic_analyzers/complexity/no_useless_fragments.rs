@@ -2,10 +2,12 @@ use crate::react::{jsx_member_name_is_react_fragment, jsx_reference_identifier_i
 use crate::semantic_services::Semantic;
 use crate::JsRuleAction;
 use biome_analyze::context::RuleContext;
-use biome_analyze::{declare_rule, ActionCategory, FixKind, Rule, RuleDiagnostic};
+use biome_analyze::{declare_rule, ActionCategory, FixKind, Rule, RuleDiagnostic, RuleSource};
 use biome_console::markup;
 use biome_diagnostics::Applicability;
-use biome_js_factory::make::{ident, js_expression_statement, jsx_string, jsx_tag_expression};
+use biome_js_factory::make::{
+    ident, js_expression_statement, js_string_literal_expression, jsx_string, jsx_tag_expression,
+};
 use biome_js_syntax::{
     AnyJsxChild, AnyJsxElementName, AnyJsxTag, JsLanguage, JsParenthesizedExpression, JsSyntaxKind,
     JsxChildList, JsxElement, JsxExpressionAttributeValue, JsxFragment, JsxTagExpression,
@@ -41,9 +43,24 @@ declare_rule! {
     /// ```jsx,expect_diagnostic
     /// <></>
     /// ```
+    ///
+    /// ### Valid
+    ///
+    /// ```jsx
+    /// <>
+    ///     <Foo />
+    ///     <Bar />
+    /// </>
+    /// ```
+    ///
+    /// ```jsx
+    /// <>foo {bar}</>
+    /// ```
+    ///
     pub(crate) NoUselessFragments {
         version: "1.0.0",
         name: "noUselessFragments",
+        source: RuleSource::EslintReact("jsx-no-useless-fragment"),
         recommended: true,
         fix_kind: FixKind::Unsafe,
     }
@@ -240,8 +257,13 @@ impl Rule for NoUselessFragments {
                         jsx_tag_expression(AnyJsxTag::JsxSelfClosingElement(node)).into_syntax(),
                     ),
                     AnyJsxChild::JsxText(text) => {
-                        let new_value = format!("\"{}\"", text.value_token().ok()?);
-                        Some(jsx_string(ident(&new_value)).into_syntax())
+                        let new_value =
+                            format!("\"{}\"", text.value_token().ok()?.token_text().trim());
+                        if parent.kind() == JsSyntaxKind::JSX_EXPRESSION_ATTRIBUTE_VALUE {
+                            Some(jsx_string(ident(&new_value)).into_syntax())
+                        } else {
+                            Some(js_string_literal_expression(ident(&new_value)).into_syntax())
+                        }
                     }
                     AnyJsxChild::JsxExpressionChild(child) => {
                         child.expression().map(|expression| {
@@ -260,7 +282,10 @@ impl Rule for NoUselessFragments {
                     mutation.remove_element(parent.into());
                 }
             } else {
-                mutation.remove_element(parent.into());
+                // can't apply a code action when there is no children because it will create invalid syntax
+                // for example `<div x-some-prop={<></>}` would become `<div x-some-prop=` which would produce
+                // a syntax error
+                return None;
             }
         }
 
@@ -280,6 +305,8 @@ impl Rule for NoUselessFragments {
             markup! {
                 "Avoid using unnecessary "<Emphasis>"Fragment"</Emphasis>"."
             },
-        ))
+        ).note(markup! {
+            "A fragment is redundant if it contains only one child, or if it is the child of a html element, and is not a keyed "<Hyperlink href="https://legacy.reactjs.org/docs/fragments.html#keyed-fragments">"fragment"</Hyperlink>"."
+        }))
     }
 }

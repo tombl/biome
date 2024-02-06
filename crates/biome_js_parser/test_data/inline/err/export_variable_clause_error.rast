@@ -1,4 +1,5 @@
 JsModule {
+    bom_token: missing (optional),
     interpreter_token: missing (optional),
     directives: JsDirectiveList [],
     items: JsModuleItemList [
@@ -79,8 +80,9 @@ JsModule {
 
 0: JS_MODULE@0..50
   0: (empty)
-  1: JS_DIRECTIVE_LIST@0..0
-  2: JS_MODULE_ITEM_LIST@0..49
+  1: (empty)
+  2: JS_DIRECTIVE_LIST@0..0
+  3: JS_MODULE_ITEM_LIST@0..49
     0: JS_EXPORT@0..16
       0: JS_DECORATOR_LIST@0..0
       1: EXPORT_KW@0..7 "export" [] [Whitespace(" ")]
@@ -131,18 +133,18 @@ JsModule {
               1: (empty)
               2: (empty)
         1: SEMICOLON@48..49 ";" [] []
-  3: EOF@49..50 "" [Newline("\n")] []
+  4: EOF@49..50 "" [Newline("\n")] []
 --
 export_variable_clause_error.js:1:16 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  × expected an expression, or an assignment but instead found ';'
+  × Expected an expression, or an assignment but instead found ';'.
   
   > 1 │ export let a = ;
       │                ^
     2 │ export const b;
     3 │ export let d, c;
   
-  i Expected an expression, or an assignment here
+  i Expected an expression, or an assignment here.
   
   > 1 │ export let a = ;
       │                ^
@@ -152,7 +154,7 @@ export_variable_clause_error.js:1:16 parse ━━━━━━━━━━━━�
 --
 export_variable_clause_error.js:2:14 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  × Const declarations must have an initialized value
+  × Const declarations must have an initialized value.
   
     1 │ export let a = ;
   > 2 │ export const b;
@@ -160,7 +162,7 @@ export_variable_clause_error.js:2:14 parse ━━━━━━━━━━━━�
     3 │ export let d, c;
     4 │ 
   
-  i this variable needs to be initialized
+  i This variable needs to be initialized.
   
 --
 export let a = ;

@@ -1,7 +1,7 @@
 use crate::prelude::*;
 use crate::utils::AnyJsConditional;
 use biome_diagnostics_categories::category;
-use biome_formatter::comments::is_doc_comment;
+use biome_formatter::comments::is_alignable_comment;
 use biome_formatter::{
     comments::{
         CommentKind, CommentPlacement, CommentStyle, CommentTextPosition, Comments,
@@ -14,8 +14,9 @@ use biome_js_syntax::JsSyntaxKind::JS_EXPORT;
 use biome_js_syntax::{
     AnyJsClass, AnyJsName, AnyJsRoot, AnyJsStatement, JsArrayHole, JsArrowFunctionExpression,
     JsBlockStatement, JsCallArguments, JsCatchClause, JsEmptyStatement, JsFinallyClause,
-    JsFormalParameter, JsFunctionBody, JsIdentifierExpression, JsIfStatement, JsLanguage,
-    JsSyntaxKind, JsSyntaxNode, JsVariableDeclarator, JsWhileStatement, TsInterfaceDeclaration,
+    JsFormalParameter, JsFunctionBody, JsIdentifierBinding, JsIdentifierExpression, JsIfStatement,
+    JsLanguage, JsParameters, JsSyntaxKind, JsSyntaxNode, JsVariableDeclarator, JsWhileStatement,
+    TsInterfaceDeclaration, TsMappedType,
 };
 use biome_rowan::{AstNode, SyntaxNodeOptionExt, SyntaxTriviaPieceComments, TextLen};
 
@@ -32,12 +33,12 @@ impl FormatRule<SourceComment<JsLanguage>> for FormatJsLeadingComment {
         comment: &SourceComment<JsLanguage>,
         f: &mut Formatter<Self::Context>,
     ) -> FormatResult<()> {
-        if is_doc_comment(comment.piece()) {
+        if is_alignable_comment(comment.piece()) {
             let mut source_offset = comment.piece().text_range().start();
 
             let mut lines = comment.piece().text().lines();
 
-            // SAFETY: Safe, `is_doc_comment` only returns `true` for multiline comments
+            // SAFETY: Safe, `is_alignable_comment` only returns `true` for multiline comments
             let first_line = lines.next().unwrap();
             write!(f, [dynamic_text(first_line.trim_end(), source_offset)])?;
 
@@ -46,21 +47,22 @@ impl FormatRule<SourceComment<JsLanguage>> for FormatJsLeadingComment {
             // Indent the remaining lines by one space so that all `*` are aligned.
             write!(
                 f,
-                [align(
-                    1,
-                    &format_once(|f| {
-                        for line in lines {
-                            write!(
-                                f,
-                                [hard_line_break(), dynamic_text(line.trim(), source_offset)]
-                            )?;
+                [&format_once(|f| {
+                    for line in lines {
+                        write!(
+                            f,
+                            [
+                                hard_line_break(),
+                                text(" "),
+                                dynamic_text(line.trim(), source_offset)
+                            ]
+                        )?;
 
-                            source_offset += line.text_len();
-                        }
+                        source_offset += line.text_len();
+                    }
 
-                        Ok(())
-                    })
-                )]
+                    Ok(())
+                })]
             )
         } else {
             write!(f, [comment.piece().as_piece()])
@@ -99,7 +101,7 @@ impl CommentStyle for JsCommentStyle {
     ) -> CommentPlacement<Self::Language> {
         match comment.text_position() {
             CommentTextPosition::EndOfLine => handle_typecast_comment(comment)
-                .or_else(handle_function_declaration_comment)
+                .or_else(handle_function_comment)
                 .or_else(handle_conditional_comment)
                 .or_else(handle_if_statement_comment)
                 .or_else(handle_while_comment)
@@ -108,7 +110,6 @@ impl CommentStyle for JsCommentStyle {
                 .or_else(handle_method_comment)
                 .or_else(handle_for_comment)
                 .or_else(handle_root_comments)
-                .or_else(handle_array_hole_comment)
                 .or_else(handle_variable_declarator_comment)
                 .or_else(handle_parameter_comment)
                 .or_else(handle_labelled_statement_comment)
@@ -116,9 +117,10 @@ impl CommentStyle for JsCommentStyle {
                 .or_else(handle_continue_break_comment)
                 .or_else(handle_mapped_type_comment)
                 .or_else(handle_switch_default_case_comment)
+                .or_else(handle_after_arrow_fat_arrow_comment)
                 .or_else(handle_import_export_specifier_comment),
             CommentTextPosition::OwnLine => handle_member_expression_comment(comment)
-                .or_else(handle_function_declaration_comment)
+                .or_else(handle_function_comment)
                 .or_else(handle_if_statement_comment)
                 .or_else(handle_while_comment)
                 .or_else(handle_try_comment)
@@ -127,13 +129,13 @@ impl CommentStyle for JsCommentStyle {
                 .or_else(handle_for_comment)
                 .or_else(handle_root_comments)
                 .or_else(handle_parameter_comment)
-                .or_else(handle_array_hole_comment)
                 .or_else(handle_labelled_statement_comment)
                 .or_else(handle_call_expression_comment)
                 .or_else(handle_mapped_type_comment)
                 .or_else(handle_continue_break_comment)
                 .or_else(handle_union_type_comment)
-                .or_else(handle_import_export_specifier_comment),
+                .or_else(handle_import_export_specifier_comment)
+                .or_else(handle_class_method_comment),
             CommentTextPosition::SameLine => handle_if_statement_comment(comment)
                 .or_else(handle_while_comment)
                 .or_else(handle_for_comment)
@@ -142,7 +144,8 @@ impl CommentStyle for JsCommentStyle {
                 .or_else(handle_array_hole_comment)
                 .or_else(handle_call_expression_comment)
                 .or_else(handle_continue_break_comment)
-                .or_else(handle_class_comment),
+                .or_else(handle_class_comment)
+                .or_else(handle_declare_comment),
         }
     }
 }
@@ -155,6 +158,63 @@ fn handle_typecast_comment(comment: DecoratedComment<JsLanguage>) -> CommentPlac
         }
         _ => CommentPlacement::Default(comment),
     }
+}
+
+/// Move the arrow function's comment to the same position as the prettier
+fn handle_after_arrow_fat_arrow_comment(
+    comment: DecoratedComment<JsLanguage>,
+) -> CommentPlacement<JsLanguage> {
+    if JsArrowFunctionExpression::can_cast(comment.enclosing_node().kind()) {
+        // input
+        // ```javascript
+        // num => // comment
+        // c;
+        // ```
+        // output
+        // ```javascript
+        //(
+        //   num, // comment
+        // ) => c;
+        // ```
+        if let Some(js_ident_binding) = comment
+            .preceding_node()
+            .and_then(JsIdentifierBinding::cast_ref)
+        {
+            return CommentPlacement::trailing(js_ident_binding.into_syntax(), comment);
+        }
+        // input
+        // ```javascript
+        // (num1,num2) => // comment
+        // c;
+        // ```
+        // output
+        // ```javascript
+        // (
+        //     num1,
+        //     num2, // comment
+        //  ) => c;
+        // ```
+        if let Some(js_parameters) = comment.preceding_node().and_then(JsParameters::cast_ref) {
+            if let Some(Ok(last)) = js_parameters.items().last() {
+                return CommentPlacement::trailing(last.into_syntax(), comment);
+            };
+        }
+        // input
+        // ```javascript
+        // () => // comment
+        // c;
+        // ```
+        // output
+        // ```javascript
+        // () =>
+        // // comment
+        // c;
+        // ```
+        if let Some(following_node) = comment.following_node() {
+            return CommentPlacement::leading(following_node.clone(), comment);
+        }
+    }
+    CommentPlacement::Default(comment)
 }
 
 fn handle_after_arrow_param_comment(
@@ -208,7 +268,27 @@ fn handle_call_expression_comment(
 fn handle_continue_break_comment(
     comment: DecoratedComment<JsLanguage>,
 ) -> CommentPlacement<JsLanguage> {
+    // Make comments between `continue`/`break` and the label, leading comments of the label.
+    // ```javascript
+    // continue /* comment */ a;
+    // ```
+    if let Some(next) = comment.following_node() {
+        if next.kind() == JsSyntaxKind::JS_LABEL {
+            return CommentPlacement::leading(next.clone(), comment);
+        }
+    }
+
     let enclosing = comment.enclosing_node();
+
+    if let (Some(preceding), Some(parent)) =
+        (comment.preceding_node(), comment.enclosing_node().parent())
+    {
+        if preceding.kind() == JsSyntaxKind::JS_LABEL
+            && parent.kind() != JsSyntaxKind::JS_FOR_STATEMENT
+        {
+            return CommentPlacement::trailing(preceding.clone(), comment);
+        }
+    }
 
     // Make comments between the `continue` and label token trailing comments
     // ```javascript
@@ -256,22 +336,39 @@ fn handle_continue_break_comment(
 ///     }
 /// ```
 ///
-/// All other same line comments become `Dangling` comments that are handled inside of the default case
-/// formatting
+/// All other same line comments will use `Default` placement if they have a preceding node.
+/// ```javascript
+/// switch(x) {
+///     default:
+///         a(); // asd
+///         break;
+/// }
+/// ```
+///
+/// All other comments become `Dangling` comments that are handled inside of the default case
+/// formatting.
 fn handle_switch_default_case_comment(
     comment: DecoratedComment<JsLanguage>,
 ) -> CommentPlacement<JsLanguage> {
-    match (comment.enclosing_node().kind(), comment.following_node()) {
-        (JsSyntaxKind::JS_DEFAULT_CLAUSE, Some(following)) => {
-            match JsBlockStatement::cast_ref(following) {
-                Some(block) if comment.kind().is_line() => {
-                    place_block_statement_comment(block, comment)
-                }
-                _ => CommentPlacement::dangling(comment.enclosing_node().clone(), comment),
-            }
-        }
-        _ => CommentPlacement::Default(comment),
+    if comment.enclosing_node().kind() != JsSyntaxKind::JS_DEFAULT_CLAUSE {
+        return CommentPlacement::Default(comment);
     }
+
+    if !comment.kind().is_line() {
+        return CommentPlacement::dangling(comment.enclosing_node().clone(), comment);
+    }
+
+    let Some(block) = comment
+        .following_node()
+        .and_then(JsBlockStatement::cast_ref)
+    else {
+        if comment.preceding_node().is_some() {
+            return CommentPlacement::Default(comment);
+        }
+        return CommentPlacement::dangling(comment.enclosing_node().clone(), comment);
+    };
+
+    place_block_statement_comment(block, comment)
 }
 
 fn handle_labelled_statement_comment(
@@ -280,6 +377,57 @@ fn handle_labelled_statement_comment(
     match comment.enclosing_node().kind() {
         JsSyntaxKind::JS_LABELED_STATEMENT => {
             CommentPlacement::leading(comment.enclosing_node().clone(), comment)
+        }
+        _ => CommentPlacement::Default(comment),
+    }
+}
+
+/// Moves comments in declaration statements to behind the identifier
+///
+/// ```javascript
+/// declare module /* comment */ A {}
+/// declare /* module */ global {}
+/// ```
+fn handle_declare_comment(comment: DecoratedComment<JsLanguage>) -> CommentPlacement<JsLanguage> {
+    match (comment.enclosing_node().kind(), comment.following_node()) {
+        // Check if it is a declare statement
+        (JsSyntaxKind::TS_DECLARE_STATEMENT, Some(following)) => {
+            match following.kind() {
+                JsSyntaxKind::TS_GLOBAL_DECLARATION => {
+                    // Global declarations have no identifier, so keep at default
+                    CommentPlacement::Default(comment)
+                }
+                JsSyntaxKind::TS_MODULE_DECLARATION
+                | JsSyntaxKind::TS_ENUM_DECLARATION
+                | JsSyntaxKind::TS_INTERFACE_DECLARATION
+                | JsSyntaxKind::TS_DECLARE_FUNCTION_DECLARATION
+                | JsSyntaxKind::TS_TYPE_ALIAS_DECLARATION => {
+                    // Move comment after the module keyword
+                    // This is the first child of the module declaration which is the identifier
+                    if let Some(first_child) = following.first_child() {
+                        return CommentPlacement::leading(first_child.clone(), comment);
+                    }
+                    CommentPlacement::Default(comment)
+                }
+                JsSyntaxKind::JS_CLASS_DECLARATION => {
+                    if let Some(first_child) = following.first_child() {
+                        if let Some(second_child) = first_child.next_sibling() {
+                            return CommentPlacement::leading(second_child.clone(), comment);
+                        }
+                    }
+                    CommentPlacement::Default(comment)
+                }
+                JsSyntaxKind::JS_VARIABLE_DECLARATION_CLAUSE => {
+                    let first_identifier = following
+                        .descendants()
+                        .find(|node| node.kind() == JsSyntaxKind::JS_IDENTIFIER_BINDING);
+                    if let Some(first_identifier_exists) = first_identifier {
+                        return CommentPlacement::leading(first_identifier_exists.clone(), comment);
+                    }
+                    CommentPlacement::Default(comment)
+                }
+                _ => CommentPlacement::Default(comment),
+            }
         }
         _ => CommentPlacement::Default(comment),
     }
@@ -499,38 +647,32 @@ fn handle_member_expression_comment(
     }
 }
 
-fn handle_function_declaration_comment(
-    comment: DecoratedComment<JsLanguage>,
-) -> CommentPlacement<JsLanguage> {
-    let is_function_declaration = matches!(
+fn handle_function_comment(comment: DecoratedComment<JsLanguage>) -> CommentPlacement<JsLanguage> {
+    if !matches!(
         comment.enclosing_node().kind(),
         JsSyntaxKind::JS_FUNCTION_DECLARATION
             | JsSyntaxKind::JS_FUNCTION_EXPORT_DEFAULT_DECLARATION
-    );
-
-    let following = match comment.following_node() {
-        Some(following) if is_function_declaration => following,
-        _ => return CommentPlacement::Default(comment),
+            | JsSyntaxKind::JS_FUNCTION_EXPRESSION
+    ) || !comment.kind().is_line()
+    {
+        return CommentPlacement::Default(comment);
     };
 
-    // Make comments between the `)` token and the function body leading comments
-    // of the first non empty statement or dangling comments of the body.
+    let Some(body) = comment.following_node().and_then(JsFunctionBody::cast_ref) else {
+        return CommentPlacement::Default(comment);
+    };
+
+    // Make line comments between the `)` token and the function body leading comments
+    // of the first statement or dangling comments of the body.
     // ```javascript
-    // function test() /* comment */ {
+    // function test() // comment
+    // {
     //  console.log("Hy");
     // }
     // ```
-    if let Some(body) = JsFunctionBody::cast_ref(following) {
-        match body
-            .statements()
-            .iter()
-            .find(|statement| !matches!(statement, AnyJsStatement::JsEmptyStatement(_)))
-        {
-            Some(first) => CommentPlacement::leading(first.into_syntax(), comment),
-            None => CommentPlacement::dangling(body.into_syntax(), comment),
-        }
-    } else {
-        CommentPlacement::Default(comment)
+    match body.statements().first() {
+        Some(first) => CommentPlacement::leading(first.into_syntax(), comment),
+        None => CommentPlacement::dangling(body.into_syntax(), comment),
     }
 }
 
@@ -1041,11 +1183,31 @@ fn handle_parameter_comment(comment: DecoratedComment<JsLanguage>) -> CommentPla
 fn handle_mapped_type_comment(
     comment: DecoratedComment<JsLanguage>,
 ) -> CommentPlacement<JsLanguage> {
-    if let (JsSyntaxKind::TS_MAPPED_TYPE, Some(following)) =
-        (comment.enclosing_node().kind(), comment.following_node())
-    {
-        if following.kind() == JsSyntaxKind::TS_TYPE_PARAMETER_NAME {
-            return CommentPlacement::dangling(comment.enclosing_node().clone(), comment);
+    if !matches!(
+        comment.enclosing_node().kind(),
+        JsSyntaxKind::TS_MAPPED_TYPE
+    ) {
+        return CommentPlacement::Default(comment);
+    }
+
+    if matches!(
+        comment.following_node().kind(),
+        Some(
+            JsSyntaxKind::TS_TYPE_PARAMETER_NAME
+                | JsSyntaxKind::TS_MAPPED_TYPE_READONLY_MODIFIER_CLAUSE,
+        )
+    ) {
+        return CommentPlacement::dangling(comment.enclosing_node().clone(), comment);
+    }
+
+    if matches!(
+        comment.preceding_node().kind(),
+        Some(JsSyntaxKind::TS_TYPE_PARAMETER_NAME)
+    ) {
+        if let Some(enclosing) = TsMappedType::cast_ref(comment.enclosing_node()) {
+            if let Ok(keys_type) = enclosing.keys_type() {
+                return CommentPlacement::trailing(keys_type.into_syntax(), comment);
+            }
         }
     }
 
@@ -1095,6 +1257,57 @@ fn handle_import_export_specifier_comment(
             }
         }
 
+        JsSyntaxKind::JS_EXPORT_NAMED_FROM_CLAUSE => {
+            if let Some(following_token) = comment.following_token() {
+                // if we are at the end of a list of import specifiers
+                // and encounter a comment
+                // ```javascript
+                // import {
+                //   MULTI,
+                //   LINE,
+                //   THING,
+                //   // some comment here
+                // } from 'foo'
+                // - then attach it as a trailing comment to `THING`
+                if matches!(following_token.kind(), JsSyntaxKind::R_CURLY) {
+                    if let Some(preceding) = comment.preceding_node() {
+                        return CommentPlacement::trailing(preceding.clone(), comment);
+                    }
+                }
+            }
+            CommentPlacement::Default(comment)
+        }
+
+        _ => CommentPlacement::Default(comment),
+    }
+}
+
+/// Attach comments before the `async` keyword or `*` token to the preceding node if it exists
+/// to ensure these comments are placed before the `async` keyword or `*` token.
+/// ```javascript
+/// class Foo {
+///    @decorator()
+///    // comment
+///    async method() {}
+/// }
+fn handle_class_method_comment(
+    comment: DecoratedComment<JsLanguage>,
+) -> CommentPlacement<JsLanguage> {
+    let enclosing_node = comment.enclosing_node();
+    match enclosing_node.kind() {
+        JsSyntaxKind::JS_METHOD_CLASS_MEMBER => {
+            if let Some(following_token) = comment.following_token() {
+                if matches!(
+                    following_token.kind(),
+                    JsSyntaxKind::ASYNC_KW | JsSyntaxKind::STAR
+                ) {
+                    if let Some(preceding) = comment.preceding_node() {
+                        return CommentPlacement::trailing(preceding.clone(), comment);
+                    }
+                }
+            }
+            CommentPlacement::Default(comment)
+        }
         _ => CommentPlacement::Default(comment),
     }
 }

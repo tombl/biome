@@ -1,21 +1,16 @@
 use biome_analyze::{
     context::RuleContext, declare_rule, AddVisitor, Phases, QueryMatch, Queryable, Rule,
-    RuleDiagnostic, ServiceBag, Visitor, VisitorContext,
+    RuleDiagnostic, RuleSource, ServiceBag, Visitor, VisitorContext,
 };
 use biome_console::markup;
-use biome_deserialize::{
-    json::{has_only_known_keys, VisitJsonNode},
-    DeserializationDiagnostic, VisitNode,
-};
+use biome_deserialize_macros::Deserializable;
 use biome_js_syntax::{
     AnyFunctionLike, JsBreakStatement, JsContinueStatement, JsElseClause, JsLanguage,
     JsLogicalExpression, JsLogicalOperator,
 };
-use biome_json_syntax::{JsonLanguage, JsonSyntaxNode};
 use biome_rowan::{AstNode, Language, SyntaxNode, TextRange, WalkEvent};
-use bpaf::Bpaf;
 use serde::{Deserialize, Serialize};
-use std::str::FromStr;
+use std::num::NonZeroU8;
 
 #[cfg(feature = "schemars")]
 use schemars::JsonSchema;
@@ -37,11 +32,7 @@ declare_rule! {
     /// those that exceed a configured complexity threshold (default: 15).
     ///
     /// The complexity score is calculated based on the Cognitive Complexity
-    /// algorithm: http://redirect.sonarsource.com/doc/cognitive-complexity.html
-    ///
-    /// Source:
-    ///
-    /// * https://github.com/SonarSource/eslint-plugin-sonarjs/blob/HEAD/docs/rules/cognitive-complexity.md
+    /// algorithm: https://redirect.sonarsource.com/doc/cognitive-complexity.html
     ///
     /// ## Examples
     ///
@@ -81,6 +72,7 @@ declare_rule! {
     pub(crate) NoExcessiveCognitiveComplexity {
         version: "1.0.0",
         name: "noExcessiveCognitiveComplexity",
+        source: RuleSource::EslintSonarJs("cognitive-complexity"),
         recommended: false,
     }
 }
@@ -93,7 +85,7 @@ impl Rule for NoExcessiveCognitiveComplexity {
 
     fn run(ctx: &RuleContext<Self>) -> Self::Signals {
         let calculated_score = ctx.query().score.calculated_score;
-        (calculated_score > ctx.options().max_allowed_complexity).then_some(())
+        (calculated_score > ctx.options().max_allowed_complexity.get()).then_some(())
     }
 
     fn diagnostic(ctx: &RuleContext<Self>, _: &Self::State) -> Option<RuleDiagnostic> {
@@ -373,66 +365,18 @@ pub struct ComplexityScore {
 }
 
 /// Options for the rule `noExcessiveCognitiveComplexity`.
-#[derive(Deserialize, Serialize, Debug, Eq, PartialEq, Clone, Bpaf)]
+#[derive(Clone, Debug, Deserialize, Deserializable, Eq, PartialEq, Serialize)]
 #[cfg_attr(feature = "schema", derive(JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ComplexityOptions {
     /// The maximum complexity score that we allow. Anything higher is considered excessive.
-    pub max_allowed_complexity: u8,
+    pub max_allowed_complexity: NonZeroU8,
 }
 
 impl Default for ComplexityOptions {
     fn default() -> Self {
         Self {
-            max_allowed_complexity: 15,
+            max_allowed_complexity: NonZeroU8::new(15).unwrap(),
         }
-    }
-}
-
-impl FromStr for ComplexityOptions {
-    type Err = ();
-
-    fn from_str(_s: &str) -> Result<Self, Self::Err> {
-        Ok(Self::default())
-    }
-}
-
-impl VisitNode<JsonLanguage> for ComplexityOptions {
-    fn visit_member_name(
-        &mut self,
-        node: &JsonSyntaxNode,
-        diagnostics: &mut Vec<DeserializationDiagnostic>,
-    ) -> Option<()> {
-        has_only_known_keys(node, &["maxAllowedComplexity"], diagnostics)
-    }
-
-    fn visit_map(
-        &mut self,
-        key: &JsonSyntaxNode,
-        value: &JsonSyntaxNode,
-        diagnostics: &mut Vec<DeserializationDiagnostic>,
-    ) -> Option<()> {
-        let (name, value) = self.get_key_and_value(key, value, diagnostics)?;
-        let name_text = name.text();
-        if name_text == "maxAllowedComplexity" {
-            if let Some(value) = value
-                .as_json_number_value()
-                .and_then(|number_value| u8::from_str(&number_value.syntax().to_string()).ok())
-                // Don't allow 0 or no code would pass.
-                // And don't allow MAX_SCORE or we can't detect exceeding it.
-                .filter(|&number| number > 0 && number < MAX_SCORE)
-            {
-                self.max_allowed_complexity = value;
-            } else {
-                diagnostics.push(
-                    DeserializationDiagnostic::new(markup! {
-                        "The field "<Emphasis>"maxAllowedComplexity"</Emphasis>
-                        " must contain an integer between 1 and "{MAX_SCORE - 1}
-                    })
-                    .with_range(value.range()),
-                );
-            }
-        }
-        Some(())
     }
 }

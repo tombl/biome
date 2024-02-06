@@ -1,12 +1,10 @@
 mod analyzers;
-mod diagnostics;
 mod registry;
 
-use crate::diagnostics::SuppressionDiagnostic;
 pub use crate::registry::visit_registry;
 use biome_analyze::{
     AnalysisFilter, AnalyzerOptions, AnalyzerSignal, ControlFlow, LanguageRoot, MatchQueryParams,
-    MetadataRegistry, RuleRegistry, SuppressionKind,
+    MetadataRegistry, RuleRegistry, SuppressionDiagnostic, SuppressionKind,
 };
 use biome_diagnostics::Error;
 use biome_json_syntax::JsonLanguage;
@@ -136,7 +134,7 @@ mod tests {
         let rule_filter = RuleFilter::Rule("nursery", "noDuplicateKeys");
         let options = AnalyzerOptions::default();
         analyze(
-            &parsed.tree().value().unwrap(),
+            &parsed.tree(),
             AnalysisFilter {
                 enabled_rules: Some(slice::from_ref(&rule_filter)),
                 ..AnalysisFilter::default()

@@ -1,12 +1,13 @@
 import init, {
-	type Configuration,
 	DiagnosticPrinter,
+	type PartialConfiguration as Configuration,
 	type RomePath as BiomePath,
 	type RuleCategories,
 	Workspace,
 } from "@biomejs/wasm-web";
 import {
 	ArrowParentheses,
+	AttributePosition,
 	type BiomeOutput,
 	IndentStyle,
 	LintRules,
@@ -73,9 +74,12 @@ self.addEventListener("message", async (e) => {
 				trailingComma,
 				semicolons,
 				arrowParentheses,
+				bracketSpacing,
+				bracketSameLine,
 				importSortingEnabled,
 				unsafeParameterDecoratorsEnabled,
 				allowComments,
+				attributePosition,
 			} = e.data.settings as PlaygroundSettings;
 
 			configuration = {
@@ -85,6 +89,8 @@ self.addEventListener("message", async (e) => {
 					lineWidth: lineWidth,
 					indentStyle: indentStyle === IndentStyle.Tab ? "tab" : "space",
 					indentWidth,
+					attributePosition:
+						attributePosition === AttributePosition.Auto ? "auto" : "multiline",
 				},
 
 				linter: {
@@ -111,6 +117,12 @@ self.addEventListener("message", async (e) => {
 							arrowParentheses === ArrowParentheses.Always
 								? "always"
 								: "asNeeded",
+						bracketSpacing,
+						bracketSameLine,
+						attributePosition:
+							attributePosition === AttributePosition.Auto
+								? "auto"
+								: "multiline",
 					},
 					parser: {
 						unsafeParameterDecoratorsEnabled,
@@ -142,6 +154,7 @@ self.addEventListener("message", async (e) => {
 
 			workspace.updateSettings({
 				configuration,
+				gitignore_matches: [],
 			});
 			break;
 		}

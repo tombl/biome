@@ -1,5 +1,6 @@
 use biome_analyze::{
     context::RuleContext, declare_rule, ActionCategory, Ast, FixKind, Rule, RuleDiagnostic,
+    RuleSource,
 };
 use biome_console::markup;
 use biome_diagnostics::Applicability;
@@ -11,8 +12,6 @@ use crate::JsRuleAction;
 
 declare_rule! {
     /// Disallow unclear usage of consecutive space characters in regular expression literals
-    ///
-    /// Source: https://eslint.org/docs/latest/rules/no-regex-spaces/
     ///
     /// ## Examples
     ///
@@ -50,8 +49,9 @@ declare_rule! {
     pub(crate) NoMultipleSpacesInRegularExpressionLiterals {
         version: "1.0.0",
         name: "noMultipleSpacesInRegularExpressionLiterals",
+        source: RuleSource::Eslint("no-regex-spaces"),
         recommended: true,
-        fix_kind: FixKind::Unsafe,
+        fix_kind: FixKind::Safe,
     }
 }
 
@@ -67,7 +67,8 @@ impl Rule for NoMultipleSpacesInRegularExpressionLiterals {
         let mut range_list = vec![];
         let mut previous_is_space = false;
         let mut first_consecutive_space_index = 0;
-        for (i, ch) in trimmed_text.chars().enumerate() {
+        // We use `char_indices` to get the byte index of every character
+        for (i, ch) in trimmed_text.char_indices() {
             if ch == ' ' {
                 if !previous_is_space {
                     previous_is_space = true;
@@ -177,7 +178,7 @@ impl Rule for NoMultipleSpacesInRegularExpressionLiterals {
         mutation.replace_token(token, next_trimmed_token);
         Some(JsRuleAction {
             category: ActionCategory::QuickFix,
-            applicability: Applicability::MaybeIncorrect,
+            applicability: Applicability::Always,
             message: markup! { "Use a quantifier instead." }.to_owned(),
             mutation,
         })

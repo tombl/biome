@@ -28,6 +28,7 @@ const {  	adsadasdasdasdasdasdasdasdasdasdas,
 -----
 Indent style: Tab
 Indent width: 2
+Line ending: LF
 Line width: 80
 Quote style: Double Quotes
 JSX quote style: Double Quotes
@@ -35,6 +36,9 @@ Quote properties: As needed
 Trailing comma: All
 Semicolons: Always
 Arrow parentheses: Always
+Bracket spacing: true
+Bracket same line: false
+Attribute Position: Auto
 -----
 
 ```js
@@ -56,6 +60,7 @@ const {
 -----
 Indent style: Tab
 Indent width: 2
+Line ending: LF
 Line width: 80
 Quote style: Double Quotes
 JSX quote style: Double Quotes
@@ -63,6 +68,9 @@ Quote properties: As needed
 Trailing comma: ES5
 Semicolons: Always
 Arrow parentheses: Always
+Bracket spacing: true
+Bracket same line: false
+Attribute Position: Auto
 -----
 
 ```js
@@ -84,6 +92,7 @@ const {
 -----
 Indent style: Tab
 Indent width: 2
+Line ending: LF
 Line width: 80
 Quote style: Double Quotes
 JSX quote style: Double Quotes
@@ -91,6 +100,9 @@ Quote properties: As needed
 Trailing comma: None
 Semicolons: Always
 Arrow parentheses: Always
+Bracket spacing: true
+Bracket same line: false
+Attribute Position: Auto
 -----
 
 ```js

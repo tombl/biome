@@ -28,12 +28,13 @@ pub use highlight::*;
 
 use biome_js_syntax::JsSyntaxKind::*;
 pub use biome_js_syntax::*;
-use biome_js_unicode_table::{
-    is_id_continue, is_id_start, lookup_byte,
-    Dispatch::{self, *},
-};
 use biome_parser::diagnostic::ParseDiagnostic;
 use biome_parser::lexer::{LexContext, Lexer, LexerCheckpoint, TokenFlags};
+use biome_unicode_table::{
+    is_js_id_continue, is_js_id_start, lookup_byte,
+    Dispatch::{self, *},
+};
+use unicode_bom::Bom;
 
 use self::errors::invalid_digits_after_unicode_escape_sequence;
 
@@ -120,6 +121,9 @@ pub(crate) struct JsLexer<'src> {
     /// `true` if there has been a line break between the last non-trivia token and the next non-trivia token.
     after_newline: bool,
 
+    /// If the source starts with a Unicode BOM, this is the number of bytes for that token.
+    unicode_bom_length: usize,
+
     /// Byte offset of the current token from the start of the source
     /// The range of the current token can be computed by `self.position - self.current_start`
     current_start: TextSize,
@@ -157,6 +161,7 @@ impl<'src> Lexer<'src> for JsLexer<'src> {
             current_flags: self.current_flags,
             current_kind: self.current_kind,
             after_line_break: self.after_newline,
+            unicode_bom_length: self.unicode_bom_length,
             diagnostics_pos: self.diagnostics.len() as u32,
         }
     }
@@ -228,6 +233,7 @@ impl<'src> Lexer<'src> for JsLexer<'src> {
             current_flags,
             current_kind,
             after_line_break,
+            unicode_bom_length,
             diagnostics_pos,
         } = checkpoint;
 
@@ -238,6 +244,7 @@ impl<'src> Lexer<'src> for JsLexer<'src> {
         self.current_start = current_start;
         self.current_flags = current_flags;
         self.after_newline = after_line_break;
+        self.unicode_bom_length = unicode_bom_length;
         self.diagnostics.truncate(diagnostics_pos as usize);
     }
 
@@ -256,6 +263,7 @@ impl<'src> JsLexer<'src> {
         Self {
             source,
             after_newline: false,
+            unicode_bom_length: 0,
             current_kind: TOMBSTONE,
             current_start: TextSize::from(0),
             current_flags: TokenFlags::empty(),
@@ -461,6 +469,31 @@ impl<'src> JsLexer<'src> {
         }
     }
 
+    /// Check if the source starts with a Unicode BOM character. If it does,
+    /// consume it and return the UNICODE_BOM token kind.
+    ///
+    /// ## Safety
+    /// Must be called at a valid UT8 char boundary (and realistically only at
+    /// the start position of the source).
+    fn consume_potential_bom(&mut self) -> Option<JsSyntaxKind> {
+        // Bom needs at least the first three bytes of the source to know if it
+        // matches the UTF-8 BOM and not an alternative. This can be expanded
+        // to more bytes to support other BOM characters if Biome decides to
+        // support other encodings like UTF-16.
+        if let Some(first) = self.source().get(0..3) {
+            let bom = Bom::from(first.as_bytes());
+            self.unicode_bom_length = bom.len();
+            self.advance(self.unicode_bom_length);
+
+            match bom {
+                Bom::Null => None,
+                _ => Some(UNICODE_BOM),
+            }
+        } else {
+            None
+        }
+    }
+
     /// Get the UTF8 char which starts at the current byte
     ///
     /// ## Safety
@@ -604,7 +637,7 @@ impl<'src> JsLexer<'src> {
             // but it may cause a panic for other crates which just consume the diagnostics
             let invalid = self.current_char_unchecked();
             let err = ParseDiagnostic::new(  "expected hex digits for a unicode code point escape, but encountered an invalid character",
-                self.position..self.position + invalid.len_utf8() );
+                                             self.position..self.position + invalid.len_utf8() );
             self.diagnostics.push(err);
             self.position -= 1;
             return Err(());
@@ -647,7 +680,7 @@ impl<'src> JsLexer<'src> {
                     "out of bounds codepoint for unicode codepoint escape sequence",
                     start..self.position,
                 )
-                .hint("Codepoints range from 0 to 0x10FFFF (1114111)");
+                .with_hint("Codepoints range from 0 to 0x10FFFF (1114111)");
                 self.diagnostics.push(err);
                 Err(())
             }
@@ -716,7 +749,7 @@ impl<'src> JsLexer<'src> {
             "invalid digits after hex escape sequence",
             (self.position - 1)..(self.position + 1),
         )
-        .hint("Expected 2 hex digits following this");
+        .with_hint("Expected 2 hex digits following this");
 
         for _ in 0..2 {
             match self.next_byte_bounded() {
@@ -769,10 +802,10 @@ impl<'src> JsLexer<'src> {
                 }
             }
         } else {
-            self.diagnostics.push(
-                ParseDiagnostic::new("", cur..cur + 1)
-                    .hint("expected an escape sequence following a backslash, but found none"),
-            );
+            self.diagnostics
+                .push(ParseDiagnostic::new("", cur..cur + 1).with_hint(
+                    "expected an escape sequence following a backslash, but found none",
+                ));
             false
         }
     }
@@ -832,8 +865,8 @@ impl<'src> JsLexer<'src> {
                 b'\r' | b'\n' if !jsx_attribute => {
                     let unterminated =
                         ParseDiagnostic::new("unterminated string literal", start..self.position)
-                            .detail(start..self.position, "")
-                            .detail(self.position..self.position + 2, "line breaks here");
+                            .with_detail(start..self.position, "")
+                            .with_detail(self.position..self.position + 2, "line breaks here");
                     self.diagnostics.push(unterminated);
                     return false;
                 }
@@ -853,8 +886,8 @@ impl<'src> JsLexer<'src> {
 
         let unterminated =
             ParseDiagnostic::new("unterminated string literal", self.position..self.position)
-                .detail(self.position..self.position, "input ends here")
-                .detail(start..start + 1, "string literal starts here");
+                .with_detail(self.position..self.position, "input ends here")
+                .with_detail(start..start + 1, "string literal starts here");
         self.diagnostics.push(unterminated);
 
         false
@@ -879,7 +912,7 @@ impl<'src> JsLexer<'src> {
             // FIXME: This should use ID_Continue, not XID_Continue
             UNI => {
                 let chr = self.current_char_unchecked();
-                let res = is_id_continue(chr);
+                let res = is_js_id_continue(chr);
                 if res {
                     self.advance(chr.len_utf8() - 1);
                     Some((chr, false))
@@ -898,7 +931,7 @@ impl<'src> JsLexer<'src> {
                 };
 
                 if let Ok(c) = res {
-                    if is_id_continue(c) {
+                    if is_js_id_continue(c) {
                         Some((c, true))
                     } else {
                         self.position = start;
@@ -926,7 +959,7 @@ impl<'src> JsLexer<'src> {
             BSL if self.peek_byte() == Some(b'u') => {
                 self.next_byte();
                 if let Ok(chr) = self.read_unicode_escape(false) {
-                    if is_id_start(chr) {
+                    if is_js_id_start(chr) {
                         self.advance(5);
                         return true;
                     }
@@ -936,7 +969,7 @@ impl<'src> JsLexer<'src> {
             }
             UNI => {
                 let chr = self.current_char_unchecked();
-                if is_id_start(chr) {
+                if is_js_id_start(chr) {
                     self.advance(chr.len_utf8() - 1);
                     true
                 } else {
@@ -1334,7 +1367,7 @@ impl<'src> JsLexer<'src> {
                 "numbers cannot be followed by identifiers directly after",
                 err_start..self.position,
             )
-            .hint("an identifier cannot appear here");
+            .with_hint("an identifier cannot appear here");
 
             self.diagnostics.push(err);
             JsSyntaxKind::ERROR_TOKEN
@@ -1347,7 +1380,9 @@ impl<'src> JsLexer<'src> {
     fn read_shebang(&mut self) -> JsSyntaxKind {
         let start = self.position;
         self.next_byte();
-        if start != 0 {
+        // Shebangs must be the first text in the file, but if there was a BOM
+        // then that may be at a slightly further position than 0.
+        if start != 0 && start != self.unicode_bom_length {
             return T![#];
         }
 
@@ -1408,11 +1443,11 @@ impl<'src> JsLexer<'src> {
                     "unterminated block comment",
                     self.position..self.position + 1,
                 )
-                .detail(
+                .with_detail(
                     self.position..self.position + 1,
                     "... but the file ends here",
                 )
-                .detail(start..start + 2, "A block comment starts here");
+                .with_detail(start..start + 2, "A block comment starts here");
                 self.diagnostics.push(err);
 
                 JsSyntaxKind::COMMENT
@@ -1446,10 +1481,16 @@ impl<'src> JsLexer<'src> {
     #[inline]
     fn flag_err(&self, flag: char) -> ParseDiagnostic {
         ParseDiagnostic::new(
-            format!("duplicate flag `{}`", flag),
+            format!("Duplicate flag `{}`.", flag),
             self.position..self.position + 1,
         )
-        .hint("this flag was already used")
+        .with_hint("This flag was already used.")
+    }
+    #[inline]
+    fn flag_uv_err(&self) -> ParseDiagnostic {
+        ParseDiagnostic::new("Invalid regex flag.", self.position..self.position + 1).with_hint(
+            "The 'u' and 'v' regular expression flags cannot be enabled at the same time.",
+        )
     }
     #[inline]
     #[allow(clippy::many_single_char_names)]
@@ -1463,6 +1504,7 @@ impl<'src> JsLexer<'src> {
                 const U = 1 << 4;
                 const Y = 1 << 5;
                 const D = 1 << 6;
+                const V = 1 << 7;
             }
         }
         let current = unsafe { self.current_unchecked() };
@@ -1516,6 +1558,9 @@ impl<'src> JsLexer<'src> {
                                     flag |= RegexFlag::S;
                                 }
                                 b'u' => {
+                                    if flag.contains(RegexFlag::V) {
+                                        self.diagnostics.push(self.flag_uv_err());
+                                    }
                                     if flag.contains(RegexFlag::U) {
                                         self.diagnostics.push(self.flag_err('u'));
                                     }
@@ -1533,13 +1578,22 @@ impl<'src> JsLexer<'src> {
                                     }
                                     flag |= RegexFlag::D;
                                 }
+                                b'v' => {
+                                    if flag.contains(RegexFlag::U) {
+                                        self.diagnostics.push(self.flag_uv_err());
+                                    }
+                                    if flag.contains(RegexFlag::V) {
+                                        self.diagnostics.push(self.flag_err('v'));
+                                    }
+                                    flag |= RegexFlag::V;
+                                }
                                 _ if self.cur_ident_part().is_some() => {
                                     self.diagnostics.push(
                                         ParseDiagnostic::new(
-                                            "invalid regex flag",
+                                            "Invalid regex flag",
                                             chr_start..self.position + 1,
                                         )
-                                        .hint("this is not a valid regex flag"),
+                                        .with_hint("This is not a valid regex flag."),
                                     );
                                 }
                                 _ => break,
@@ -1560,7 +1614,7 @@ impl<'src> JsLexer<'src> {
                                 "expected a character after a regex escape, but found none",
                                 self.position..self.position + 1,
                             )
-                            .hint("expected a character following this"),
+                            .with_hint("expected a character following this"),
                         );
 
                         return JsSyntaxKind::JS_REGEX_LITERAL;
@@ -1572,8 +1626,8 @@ impl<'src> JsLexer<'src> {
                             "unterminated regex literal",
                             self.position..self.position,
                         )
-                        .detail(self.position..self.position, "...but the line ends here")
-                        .detail(start..start + 1, "a regex literal starts there..."),
+                        .with_detail(self.position..self.position, "...but the line ends here")
+                        .with_detail(start..start + 1, "a regex literal starts there..."),
                     );
 
                     return JsSyntaxKind::JS_REGEX_LITERAL;
@@ -1589,8 +1643,11 @@ impl<'src> JsLexer<'src> {
                                     "unterminated regex literal",
                                     self.position..self.position,
                                 )
-                                .detail(self.position..self.position, "...but the line ends here")
-                                .detail(start..start + 1, "a regex literal starts there..."),
+                                .with_detail(
+                                    self.position..self.position,
+                                    "...but the line ends here",
+                                )
+                                .with_detail(start..start + 1, "a regex literal starts there..."),
                             );
                             return JsSyntaxKind::JS_REGEX_LITERAL;
                         } else {
@@ -1603,8 +1660,8 @@ impl<'src> JsLexer<'src> {
 
         self.diagnostics.push(
             ParseDiagnostic::new("unterminated regex literal", self.position..self.position)
-                .detail(self.position..self.position, "...but the file ends here")
-                .detail(start..start + 1, "a regex literal starts there..."),
+                .with_detail(self.position..self.position, "...but the file ends here")
+                .with_detail(start..start + 1, "a regex literal starts there..."),
         );
 
         JsSyntaxKind::JS_REGEX_LITERAL
@@ -1840,12 +1897,12 @@ impl<'src> JsLexer<'src> {
 
                     match res {
                         Ok(chr) => {
-                            if is_id_start(chr) {
+                            if is_js_id_start(chr) {
                                 self.current_flags |= TokenFlags::UNICODE_ESCAPE;
                                 self.resolve_identifier(chr)
                             } else {
                                 let err = ParseDiagnostic::new(  "unexpected unicode escape",
-                                    start..self.position).hint("this escape is unexpected, as it does not designate the start of an identifier");
+                                                                 start..self.position).with_hint("this escape is unexpected, as it does not designate the start of an identifier");
                                 self.diagnostics.push(err);
                                 self.next_byte();
                                 JsSyntaxKind::ERROR_TOKEN
@@ -1889,6 +1946,10 @@ impl<'src> JsLexer<'src> {
             BEC => self.eat_byte(T!['}']),
             PIP => self.resolve_pipe(),
             TLD => self.eat_byte(T![~]),
+
+            // A BOM can only appear at the start of a file, so if we haven't advanced at all yet,
+            // perform the check. At any other position, the BOM is just considered plain whitespace.
+            UNI if self.position == 0 && self.consume_potential_bom().is_some() => UNICODE_BOM,
             UNI => {
                 let chr = self.current_char_unchecked();
                 if is_linebreak(chr)
@@ -1897,7 +1958,7 @@ impl<'src> JsLexer<'src> {
                     self.consume_newline_or_whitespaces()
                 } else {
                     self.advance(chr.len_utf8() - 1);
-                    if is_id_start(chr) {
+                    if is_js_id_start(chr) {
                         self.resolve_identifier(chr)
                     } else {
                         let err = ParseDiagnostic::new(
