@@ -43,7 +43,7 @@ declare_rule! {
     /// - `useDeferredValue`
     /// - `useTransition`
     ///
-    /// If you want to add more hooks to the rule, check the [#options](options).
+    /// If you want to add more hooks to the rule, check the [options](#options).
     ///
     /// ## Examples
     ///
@@ -165,7 +165,7 @@ declare_rule! {
     /// }
     /// ```
     ///
-    pub(crate) UseExhaustiveDependencies {
+    pub UseExhaustiveDependencies {
         version: "1.0.0",
         name: "useExhaustiveDependencies",
         source: RuleSource::EslintReactHooks("exhaustive-deps"),
@@ -316,8 +316,8 @@ fn capture_needs_to_be_in_the_dependency_list(
     if binding.is_imported() {
         return None;
     }
-
-    match binding.tree().declaration()? {
+    let decl = binding.tree().declaration()?;
+    match decl.parent_binding_pattern_declaration().unwrap_or(decl) {
         // These declarations are always stable
         AnyJsBindingDeclaration::JsFunctionDeclaration(_)
         | AnyJsBindingDeclaration::JsClassDeclaration(_)
@@ -371,6 +371,15 @@ fn capture_needs_to_be_in_the_dependency_list(
 
         // Ignore TypeScript `import <id> =`
         AnyJsBindingDeclaration::TsImportEqualsDeclaration(_) => None,
+
+        // This should be unreachable because we call `parent_binding_pattern_declaration`
+        AnyJsBindingDeclaration::JsArrayBindingPatternElement(_)
+        | AnyJsBindingDeclaration::JsArrayBindingPatternRestElement(_)
+        | AnyJsBindingDeclaration::JsObjectBindingPatternProperty(_)
+        | AnyJsBindingDeclaration::JsObjectBindingPatternRest(_)
+        | AnyJsBindingDeclaration::JsObjectBindingPatternShorthandProperty(_) => {
+            unreachable!("The declaration should be resolved to its prent declaration")
+        }
 
         // This should be unreachable because of the test if the capture is imported
         AnyJsBindingDeclaration::JsShorthandNamedImportSpecifier(_)
@@ -465,11 +474,11 @@ impl Rule for UseExhaustiveDependencies {
     type Query = Semantic<JsCallExpression>;
     type State = Fix;
     type Signals = Vec<Self::State>;
-    type Options = HooksOptions;
+    type Options = Box<HooksOptions>;
 
     fn run(ctx: &RuleContext<Self>) -> Vec<Self::State> {
         let options = ctx.options();
-        let options = ReactExtensiveDependenciesOptions::new(options.clone());
+        let options = ReactExtensiveDependenciesOptions::new(options.as_ref().clone());
 
         let mut signals = vec![];
 

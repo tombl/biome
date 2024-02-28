@@ -73,7 +73,7 @@ declare_rule! {
     /// foo["some long"] && foo["some long string"].baz
     ///```
     ///
-    pub(crate) UseOptionalChain {
+    pub UseOptionalChain {
         version: "1.0.0",
         name: "useOptionalChain",
         source: RuleSource::EslintTypeScript("prefer-optional-chain"),
@@ -82,7 +82,7 @@ declare_rule! {
     }
 }
 
-pub(crate) enum UseOptionalChainState {
+pub enum UseOptionalChainState {
     LogicalAnd(VecDeque<AnyJsExpression>),
     LogicalOrLike(LogicalOrLikeChain),
 }
@@ -310,7 +310,7 @@ enum LogicalAndChainOrdering {
 /// Iterate buffer `[bar, zoo]` we need to make every `JsAnyExpression` optional: `foo?.bar.baz?.zoo;`
 ///
 #[derive(Debug)]
-pub(crate) struct LogicalAndChain {
+pub struct LogicalAndChain {
     head: AnyJsExpression,
     /// The buffer of `JsAnyExpression` which need to make optional chain.
     buf: VecDeque<AnyJsExpression>,
@@ -399,13 +399,27 @@ impl LogicalAndChain {
             Ordering::Greater => LogicalAndChainOrdering::SubChain,
         };
         for (main_expression, branch_expression) in self.buf.iter().zip(&other.buf) {
-            let (main_expression, branch_expression) = match (&main_expression, &branch_expression)
-            {
+            let (
+                main_expression,
+                branch_expression,
+                main_call_expression_arguments,
+                branch_call_expression_arguments,
+            ) = match (&main_expression, &branch_expression) {
                 (
                     AnyJsExpression::JsCallExpression(main_expression),
                     AnyJsExpression::JsCallExpression(branch_expression),
-                ) => (main_expression.callee()?, branch_expression.callee()?),
-                _ => (main_expression.clone(), branch_expression.clone()),
+                ) => (
+                    main_expression.callee()?,
+                    branch_expression.callee()?,
+                    Some(main_expression.arguments()?),
+                    Some(branch_expression.arguments()?),
+                ),
+                _ => (
+                    main_expression.clone(),
+                    branch_expression.clone(),
+                    None,
+                    None,
+                ),
             };
             let (main_value_token, branch_value_token) = match (main_expression, branch_expression)
             {
@@ -453,6 +467,19 @@ impl LogicalAndChain {
             };
             if main_value_token.token_text_trimmed() != branch_value_token.token_text_trimmed() {
                 return Ok(LogicalAndChainOrdering::Different);
+            } else if main_call_expression_arguments.is_some()
+                && branch_call_expression_arguments.is_some()
+            {
+                // When comparing chains of call expressions with the same name,
+                // e.g., `foo.bar('a') && foo.bar('b')`,
+                // they should be considered different even if `main_value_token`
+                // and `branch_value_token` are the same.
+                // Therefore, we need to check their arguments here.
+                if main_call_expression_arguments.unwrap().args().text()
+                    != branch_call_expression_arguments.unwrap().args().text()
+                {
+                    return Ok(LogicalAndChainOrdering::Different);
+                }
             }
         }
         Ok(chain_ordering)
@@ -548,7 +575,7 @@ impl LogicalAndChain {
 /// `foo?.bar?.baz;`
 ///
 #[derive(Debug)]
-pub(crate) struct LogicalOrLikeChain {
+pub struct LogicalOrLikeChain {
     member: AnyJsMemberExpression,
 }
 

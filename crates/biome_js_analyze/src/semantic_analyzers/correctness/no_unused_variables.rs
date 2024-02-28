@@ -16,7 +16,7 @@ use biome_js_syntax::{
     JsIdentifierExpression, JsSequenceExpression, JsSyntaxKind, JsSyntaxNode, TsConditionalType,
     TsInferType,
 };
-use biome_rowan::{AstNode, BatchMutationExt, SyntaxResult};
+use biome_rowan::{AstNode, BatchMutationExt, Direction, SyntaxResult};
 
 declare_rule! {
     /// Disallow unused variables.
@@ -96,7 +96,7 @@ declare_rule! {
     /// }
     /// used_overloaded();
     /// ```
-    pub(crate) NoUnusedVariables {
+    pub NoUnusedVariables {
         version: "1.0.0",
         name: "noUnusedVariables",
         source: RuleSource::Eslint("no-unused-vars"),
@@ -147,7 +147,27 @@ fn suggestion_for_binding(binding: &AnyJsIdentifierBinding) -> Option<SuggestedF
 // It is ok in some Typescripts constructs for a parameter to be unused.
 // Returning None means is ok to be unused
 fn suggested_fix_if_unused(binding: &AnyJsIdentifierBinding) -> Option<SuggestedFix> {
-    match binding.declaration()? {
+    let decl = binding.declaration()?;
+    // It is fine to ignore unused rest spread silbings
+    if let node @ (AnyJsBindingDeclaration::JsObjectBindingPatternShorthandProperty(_)
+    | AnyJsBindingDeclaration::JsObjectBindingPatternProperty(_)) = &decl
+    {
+        if node
+            .syntax()
+            .siblings(Direction::Next)
+            .last()
+            .is_some_and(|last_sibling| {
+                matches!(
+                    last_sibling.kind(),
+                    JsSyntaxKind::JS_OBJECT_BINDING_PATTERN_REST
+                )
+            })
+        {
+            return None;
+        }
+    }
+
+    match decl.parent_binding_pattern_declaration().unwrap_or(decl) {
         // ok to not be used
         AnyJsBindingDeclaration::TsDeclareFunctionDeclaration(_)
         | AnyJsBindingDeclaration::JsClassExpression(_)
@@ -174,8 +194,14 @@ fn suggested_fix_if_unused(binding: &AnyJsIdentifierBinding) -> Option<Suggested
                 suggestion_for_binding(binding)
             }
         }
-
         // declarations need to be check if they are under `declare`
+        AnyJsBindingDeclaration::JsArrayBindingPatternElement(_)
+        | AnyJsBindingDeclaration::JsArrayBindingPatternRestElement(_)
+        | AnyJsBindingDeclaration::JsObjectBindingPatternProperty(_)
+        | AnyJsBindingDeclaration::JsObjectBindingPatternRest(_)
+        | AnyJsBindingDeclaration::JsObjectBindingPatternShorthandProperty(_) => {
+            unreachable!("The declaration should be resolved to its parent declaration");
+        }
         node @ AnyJsBindingDeclaration::JsVariableDeclarator(_) => {
             if is_in_ambient_context(node.syntax()) {
                 None

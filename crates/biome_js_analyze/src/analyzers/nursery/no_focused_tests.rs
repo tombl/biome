@@ -1,8 +1,14 @@
 use biome_analyze::{
-    context::RuleContext, declare_rule, Ast, Rule, RuleDiagnostic, RuleSource, RuleSourceKind,
+    context::RuleContext, declare_rule, Ast, FixKind, Rule, RuleDiagnostic, RuleSource,
+    RuleSourceKind,
 };
 use biome_console::markup;
-use biome_js_syntax::{AnyJsExpression, JsCallExpression, JsSyntaxToken, TextRange};
+use biome_diagnostics::Applicability;
+use biome_js_factory::make;
+use biome_js_syntax::{JsCallExpression, TextRange};
+use biome_rowan::BatchMutationExt;
+
+use crate::JsRuleAction;
 
 declare_rule! {
     /// Disallow focused tests.
@@ -22,14 +28,22 @@ declare_rule! {
     /// ```js,expect_diagnostic
     /// test.only("foo", () => {});
     /// ```
-    pub(crate) NoFocusedTests {
+    ///
+    /// ### Valid
+    /// ```js
+    /// test("foo", () => {});
+    /// ```
+    pub NoFocusedTests {
         version: "next",
         name: "noFocusedTests",
         recommended: true,
         source: RuleSource::EslintJest("no-focused-tests"),
         source_kind: RuleSourceKind::Inspired,
+        fix_kind: FixKind::Unsafe,
     }
 }
+
+const FUNCTION_NAMES: [&str; 3] = ["only", "fdescribe", "fit"];
 
 impl Rule for NoFocusedTests {
     type Query = Ast<JsCallExpression>;
@@ -43,9 +57,9 @@ impl Rule for NoFocusedTests {
         if node.is_test_call_expression().ok()? {
             let callee = node.callee().ok()?;
             if callee.contains_a_test_pattern().ok()? {
-                let function_name = get_function_name(&callee)?;
+                let function_name = callee.get_callee_member_name()?;
 
-                if function_name.text_trimmed() == "only" {
+                if FUNCTION_NAMES.contains(&function_name.text_trimmed()) {
                     return Some(function_name.text_trimmed_range());
                 }
             }
@@ -67,16 +81,40 @@ impl Rule for NoFocusedTests {
                 .note("Remove it.")
         )
     }
-}
 
-fn get_function_name(callee: &AnyJsExpression) -> Option<JsSyntaxToken> {
-    match callee {
-        AnyJsExpression::JsStaticMemberExpression(node) => {
-            let member = node.member().ok()?;
-            let member = member.as_js_name()?;
-            member.value_token().ok()
-        }
-        AnyJsExpression::JsIdentifierExpression(node) => node.name().ok()?.value_token().ok(),
-        _ => None,
+    fn action(ctx: &RuleContext<Self>, _: &Self::State) -> Option<JsRuleAction> {
+        let node = ctx.query();
+        let callee = node.callee().ok()?;
+        let function_name = callee.get_callee_member_name()?;
+        let replaced_function;
+
+        let mut mutation = ctx.root().begin();
+
+        match function_name.text_trimmed() {
+            "only" => {
+                let member = callee.as_js_static_member_expression()?;
+                let member_name = member.member().ok()?;
+                let operator_token = member.operator_token().ok()?;
+                // let member = member.as_js_name()?;
+                mutation.remove_element(member_name.into());
+                mutation.remove_element(operator_token.into());
+            }
+            "fit" => {
+                replaced_function = make::js_reference_identifier(make::ident("it"));
+                mutation.replace_element(function_name.into(), replaced_function.into());
+            }
+            "fdescribe" => {
+                replaced_function = make::js_reference_identifier(make::ident("describe"));
+                mutation.replace_element(function_name.into(), replaced_function.into());
+            }
+            _ => {}
+        };
+
+        Some(JsRuleAction {
+            category: biome_analyze::ActionCategory::QuickFix,
+            applicability: Applicability::MaybeIncorrect,
+            message: markup! { "Remove focus from test." }.to_owned(),
+            mutation,
+        })
     }
 }

@@ -1,6 +1,7 @@
 mod deserializable_derive;
 mod merge_derive;
-mod none_state_derive;
+mod partial_derive;
+mod util;
 
 use proc_macro::TokenStream;
 use proc_macro_error::*;
@@ -36,10 +37,42 @@ use syn::{parse_macro_input, DeriveInput};
 /// }
 /// ```
 ///
-/// ## Struct attributes
+/// ## Container attributes
 ///
-/// When [Deserializable] is derived on a struct, its behavior may be adjusted
-/// through attributes.
+/// When [Deserializable] is derived on a struct or  an enum,
+/// its behavior may be adjusted through attributes.
+///
+/// ### `unknown_fields`
+///
+/// This attribute allows controling how to handle unknown fields in structs.
+/// It takes one of the following values:
+///
+/// - `"deny"`: emit an error when an unknown struct field is found.
+/// - `"warn"`: emit a warning when an unknown struct field is found.
+/// - `"allow"`: ignore unknown struct fields.
+///
+/// The default behavior is `"warn"`, when the attribute is not specified.
+///
+/// For structs that also implement Serde's [serde::Deserialize],
+/// it automatically picks up on Serde's
+/// [`deny_unknown_fields` attribute](https://serde.rs/container-attrs.html#from).
+/// `serde(deny_unknown_fields)` is mapped to `unknown_fields = "error"`.
+/// `deserializable(unknown_fields = _)` takes precdence over `serde(deny_unknown_fields = _)`.
+///
+/// ```no_test
+/// #[derive(Default, Deserializable)]
+/// #[deserializable(unknown_fields = "deny")]
+/// struct Contact {
+///     fullname: String,
+/// }
+///
+/// #[derive(Default, Deserializable)]
+/// #[deserializable(unknown_fields = "allow")]
+/// struct Person {
+///     firstnames: String,
+///     lastname: String,
+/// }
+/// ```
 ///
 /// ### `with_validator`
 ///
@@ -78,6 +111,79 @@ use syn::{parse_macro_input, DeriveInput};
 /// }
 /// ```
 ///
+/// ### `from`
+///
+/// This attribute allows deserializing a type,
+/// and then converting it to the current annotated type.
+/// The annotated type must implement the standard [From] trait.
+///
+/// For structs and enums that also implement Serde's [serde::Deserialize],
+/// it automatically picks up on Serde's
+/// [`from` attribute](https://serde.rs/container-attrs.html#from).
+/// `deserializable(from = _)` takes precdence over `serde(from = _)`.
+///
+/// ```no_test
+/// #[derive(Default, Deserializable)]
+/// #[deserializable(from = Person)]
+/// struct Contact {
+///     fullname: String,
+/// }
+///
+/// #[derive(Default, Deserializable)]
+/// struct Person {
+///     firstnames: String,
+///     lastname: String,
+/// }
+///
+/// impl From<Person> for Contact {
+///     fn from(value: Person) -> Contact {
+///         Contact {
+///             fullname: format!("{} {}", value.firstnames, value.lastname),
+///         }
+///     }
+/// }
+/// ```
+///
+/// ### `try_from`
+///
+/// This attribute allows deserializing a type,
+/// and then attempting to convert it to the current annotated type.
+/// The annotated type must implement the standard [TryFrom] trait.
+///
+/// For structs and enums that also implement Serde's [serde::Deserialize],
+/// it automatically picks up on Serde's
+/// [`try_from` attribute](https://serde.rs/container-attrs.html#try_from).
+/// `deserializable(try_from = _)` takes precdence over `serde(try_from = _)`.
+///
+/// ```no_test
+/// #[derive(Default, Deserializable)]
+/// #[deserializable(try_from = Contact)]
+/// struct Person {
+///     firstnames: String,
+///     lastname: String,
+/// }
+///
+/// #[derive(Default, Deserializable)]
+/// struct Contact {
+///     fullname: String,
+/// }
+///
+/// impl TryFrom<Contact> for Person {
+///     Error = &'static str;
+///
+///     fn from(value: Contact) -> Person {
+///         let names: Vec<&str> = value.fullname.splitn(' ', 2).collect();
+///         if names.len() < 2  {
+///             return Err("At least two names separated by a whitespace are required.")
+///         }
+///         Person {
+///             firstnames: names[..names.len()-1].join(' ').to_string(),
+///             lastname: names[names.len()-1].to_string(),
+///         }
+///     }
+/// }
+/// ```
+///
 /// ## Struct field attributes
 ///
 /// A struct's fields may also be adjusted through attributes.
@@ -85,7 +191,7 @@ use syn::{parse_macro_input, DeriveInput};
 /// ### `bail_on_error`
 ///
 /// If present, bails on deserializing the entire struct if validation for this
-/// this field fails.
+/// field fails.
 ///
 /// Note the struct may still be deserialized if the field is not present in the
 /// serialized representation at all. In that case `Default::default()` will be
@@ -156,8 +262,10 @@ use syn::{parse_macro_input, DeriveInput};
 /// }
 /// ```
 ///
-/// For structs that also implement Serde's `Serialize` or `Deserialize`, it
-/// automatically picks up on Serde's `rename` attribute:
+/// For structs that also implement Serde's `Serialize` or `Deserialize`,
+/// it automatically picks up on Serde's
+/// [`rename` attribute](https://serde.rs/field-attrs.html#rename).
+/// `deserializable(rename = _)` takes precdence over `serde(rename = _)`.
 ///
 /// ```no_test
 /// #[derive(Default, Deserialize, Deserializable, Serialize)]
@@ -225,7 +333,8 @@ use syn::{parse_macro_input, DeriveInput};
 /// }
 /// ```
 ///
-/// Using Serde's attributes is supported on enums too.
+/// Using Serde's [rename attribute](https://serde.rs/variant-attrs.html#rename)
+/// is supported on enums too.
 #[proc_macro_derive(Deserializable, attributes(deserializable))]
 #[proc_macro_error]
 pub fn derive_deserializable(input: TokenStream) -> TokenStream {
@@ -260,14 +369,71 @@ pub fn derive_mergeable(input: TokenStream) -> TokenStream {
     TokenStream::from(tokens)
 }
 
-#[proc_macro_derive(NoneState)]
+/// Generates a "partial" struct from another.
+///
+/// A partial struct has the same shape as the struct is derived from (the
+/// "full" struct), but with all its fields wrapped in `Option`. Fields that
+/// were already wrapped in an `Option` don't get wrapped again.
+///
+/// The name of the generated partial struct is `Partial{FullStruct}`.
+///
+/// ## Conversions
+///
+/// The [`From`] trait is implemented in both directions so that partial structs
+/// can be created from full structs and the other way around. When creating a
+/// full struct from a partial one, default values are used in place of `None`
+/// values. When creating a partial struct from a full one, the partial struct
+/// will only have `Some` values for values that differed from their default.
+///
+/// As a consequence, full structs must implement `Default` to support this
+/// macro.
+///
+/// ## Partial annotations
+///
+/// The generated partial struct can receive macro annotations, including
+/// derives, just like a regular struct. In order to pass macro annotations to
+/// the partial struct, you need to wrap them in `#[partial(...)]`. This works
+/// for both struct annotations and field annotations.
+///
+/// Example:
+///
+/// ```rs
+/// #[derive(Clone, Default, Debug, Deserialize, Eq, Partial, PartialEq, Serialize)]
+/// #[partial(derive(Clone, Deserializable, Eq, Merge, PartialEq))]
+/// pub struct CssConfiguration {
+///     #[partial(type)]
+///     pub parser: CssParser,
+///
+///     #[partial(type)]
+///     pub formatter: CssFormatter,
+/// }
+/// ```
+///
+/// Partial structs always derive `Default`, `serde::Serialize` and
+/// `serde::Deserialize`, so you should not specify those anymore. In addition,
+/// all the fields of a partial struct are automatically annotated with
+/// `#[serde(skip_serializing_if = "Option::is_none")]`.
+///
+/// ### `#[partial(type)]`
+///
+/// If one of the fields of a partial struct uses a type that itself also has
+/// a derived partial struct, you can tell the macro to use that type instead
+/// using the `#[partial(type)]`.
+///
+/// In the example above, where `CssConfiguration` has a field of type
+/// `CssParser`, this will make sure the `PartialCssConfiguration` uses
+/// `PartialCssParser` instead.
+///
+/// If you need to use a fully custom in the partial struct instead, you can do
+/// so using `#[partial(type = "MyPartialType")]`.
+#[proc_macro_derive(Partial, attributes(partial))]
 #[proc_macro_error]
-pub fn derive_none_state(input: TokenStream) -> TokenStream {
+pub fn derive_partial(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
-    let input = none_state_derive::DeriveInput::parse(input);
+    let input = partial_derive::DeriveInput::parse(input);
 
-    let tokens = none_state_derive::generate_none_state(input);
+    let tokens = partial_derive::generate_partial(input);
 
     if false {
         panic!("{tokens}");

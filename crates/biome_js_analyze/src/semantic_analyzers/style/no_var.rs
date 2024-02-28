@@ -5,7 +5,9 @@ use biome_analyze::{
 use biome_console::markup;
 use biome_diagnostics::Applicability;
 use biome_js_factory::make;
-use biome_js_syntax::{AnyJsVariableDeclaration, JsModule, JsScript, JsSyntaxKind};
+use biome_js_syntax::{
+    AnyJsVariableDeclaration, JsModule, JsScript, JsSyntaxKind, TsGlobalDeclaration,
+};
 
 use biome_rowan::{AstNode, BatchMutationExt};
 
@@ -32,7 +34,7 @@ declare_rule! {
     /// const foo = 1;
     /// let bar = 1;
     ///```
-    pub(crate) NoVar {
+    pub NoVar {
         version: "1.0.0",
         name: "noVar",
         source: RuleSource::Eslint("no-var"),
@@ -49,7 +51,18 @@ impl Rule for NoVar {
 
     fn run(ctx: &RuleContext<Self>) -> Self::Signals {
         let declaration = ctx.query();
-        declaration.is_var().then_some(())
+        if declaration.is_var() {
+            let ts_global_declaratio = &declaration
+                .syntax()
+                .ancestors()
+                .find_map(TsGlobalDeclaration::cast);
+
+            if ts_global_declaratio.is_some() {
+                return None;
+            }
+            return Some(());
+        }
+        None
     }
 
     fn diagnostic(ctx: &RuleContext<Self>, _state: &Self::State) -> Option<RuleDiagnostic> {
@@ -97,7 +110,10 @@ impl Rule for NoVar {
             JsSyntaxKind::LET_KW
         };
         let mut mutation = ctx.root().begin();
-        mutation.replace_token(declaration.kind_token()?, make::token(replacing_token_kind));
+        mutation.replace_token(
+            declaration.kind_token().ok()?,
+            make::token(replacing_token_kind),
+        );
         Some(JsRuleAction {
             category: ActionCategory::QuickFix,
             applicability: Applicability::MaybeIncorrect,

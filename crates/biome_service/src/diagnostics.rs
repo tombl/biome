@@ -6,7 +6,7 @@ use biome_diagnostics::{
     category, Advices, Category, Diagnostic, DiagnosticTags, Location, LogCategory, Severity, Visit,
 };
 use biome_formatter::{FormatError, PrintError};
-use biome_fs::{FileSystemDiagnostic, RomePath};
+use biome_fs::{BiomePath, FileSystemDiagnostic};
 use biome_js_analyze::utils::rename::RenameError;
 use biome_js_analyze::RuleError;
 use serde::{Deserialize, Serialize};
@@ -361,6 +361,12 @@ impl From<FileSystemDiagnostic> for WorkspaceError {
     }
 }
 
+impl From<ConfigurationDiagnostic> for WorkspaceError {
+    fn from(value: ConfigurationDiagnostic) -> Self {
+        Self::Configuration(value)
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Diagnostic)]
 #[diagnostic(
     category = "internalError/fs",
@@ -389,7 +395,10 @@ pub struct ReportNotSerializable {
 pub struct NotFound;
 
 #[derive(Debug, Serialize, Deserialize, Diagnostic)]
-#[diagnostic(category = "format", message = "Format with errors is disabled.")]
+#[diagnostic(
+    category = "format",
+    message = "Code formatting aborted due to parsing errors. To format code with errors, enable the 'formatter.formatWithErrors' option."
+)]
 pub struct FormatWithErrorsDisabled;
 
 #[derive(Debug, Serialize, Deserialize, Diagnostic)]
@@ -425,7 +434,7 @@ pub struct CantReadFile {
         message("The file "{self.path}" was ignored."),
         description = "The file {path} was ignored."
     ),
-    severity = Warning
+    severity = Warning,
 )]
 pub struct FileIgnored {
     #[location(resource)]
@@ -509,7 +518,7 @@ impl Diagnostic for SourceFileNotSupported {
     }
 }
 
-pub fn extension_error(path: &RomePath) -> WorkspaceError {
+pub fn extension_error(path: &BiomePath) -> WorkspaceError {
     let language = Language::from_path_and_known_filename(path).or(Language::from_path(path));
     WorkspaceError::source_file_not_supported(
         language,
@@ -715,7 +724,7 @@ mod test {
     use crate::{TransportError, WorkspaceError};
     use biome_diagnostics::{print_diagnostic_to_string, DiagnosticExt, Error};
     use biome_formatter::FormatError;
-    use biome_fs::RomePath;
+    use biome_fs::BiomePath;
     use std::ffi::OsStr;
 
     fn snap_diagnostic(test_name: &str, diagnostic: Error) {
@@ -731,7 +740,7 @@ mod test {
 
     #[test]
     fn diagnostic_size() {
-        assert_eq!(std::mem::size_of::<WorkspaceError>(), 104)
+        assert_eq!(std::mem::size_of::<WorkspaceError>(), 96)
     }
 
     #[test]
@@ -785,7 +794,7 @@ mod test {
 
     #[test]
     fn source_file_not_supported() {
-        let path = RomePath::new("not_supported.toml");
+        let path = BiomePath::new("not_supported.toml");
         snap_diagnostic(
             "source_file_not_supported",
             WorkspaceError::SourceFileNotSupported(SourceFileNotSupported {

@@ -41,31 +41,16 @@ ci.js:2:1 parse ━━━━━━━━━━━━━━━━━━━━━�
 ```
 
 ```block
-ci.js lint ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  × The file contains diagnostics that needs to be addressed.
-  
-
-```
-
-```block
 ci.js format ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  × Format with errors is disabled.
+  × Code formatting aborted due to parsing errors. To format code with errors, enable the 'formatter.formatWithErrors' option.
   
 
 ```
 
 ```block
-ci.js ci ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  × The file contains diagnostics that needs to be addressed.
-  
-
-```
-
-```block
-Checked 1 file(s) in <TIME>
+Checked 1 file in <TIME>. No fixes needed.
+Found 3 errors.
 ```
 
 

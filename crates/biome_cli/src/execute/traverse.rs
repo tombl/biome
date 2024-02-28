@@ -6,17 +6,18 @@ use crate::execute::diagnostics::{
     FormatDiffDiagnostic, OrganizeImportsDiffDiagnostic, PanicDiagnostic,
 };
 use crate::{CliDiagnostic, CliSession, Execution, FormatterReportSummary, Report, TraversalMode};
+use biome_console::fmt::Formatter;
 use biome_console::{fmt, markup, Console, ConsoleExt};
+use biome_diagnostics::DiagnosticTags;
 use biome_diagnostics::PrintGitHubDiagnostic;
 use biome_diagnostics::{category, DiagnosticExt, Error, PrintDiagnostic, Resource, Severity};
-use biome_diagnostics::{Diagnostic, DiagnosticTags};
-use biome_fs::{FileSystem, PathInterner, RomePath};
+use biome_fs::{BiomePath, FileSystem, PathInterner};
 use biome_fs::{TraversalContext, TraversalScope};
 use biome_service::workspace::{FeaturesBuilder, IsPathIgnoredParams};
 use biome_service::{extension_error, workspace::SupportsFeatureParams, Workspace, WorkspaceError};
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use rustc_hash::FxHashSet;
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::AtomicU32;
 use std::{
     ffi::OsString,
     io,
@@ -31,17 +32,105 @@ use std::{
 };
 use std::panic::UnwindSafe;
 
-struct CheckResult {
-    count: usize,
+struct SummaryResult<'a> {
+    changed: usize,
+    unchanged: usize,
     duration: Duration,
-    errors: usize,
+    errors: u32,
+    warnings: u32,
+    traversal: &'a TraversalMode,
 }
-impl fmt::Display for CheckResult {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> io::Result<()> {
-        markup!(<Info>"Checked "{self.count}" file(s) in "{self.duration}</Info>).fmt(fmt)?;
+
+struct Files(usize);
+
+impl fmt::Display for Files {
+    fn fmt(&self, fmt: &mut Formatter) -> io::Result<()> {
+        fmt.write_markup(markup!({self.0} " "))?;
+        if self.0 == 1 {
+            fmt.write_str("file")
+        } else {
+            fmt.write_str("files")
+        }
+    }
+}
+
+struct SummaryDetail(usize);
+
+impl fmt::Display for SummaryDetail {
+    fn fmt(&self, fmt: &mut Formatter) -> io::Result<()> {
+        if self.0 > 0 {
+            fmt.write_markup(markup! {
+                ". Fixed "{Files(self.0)}"."
+            })
+        } else {
+            fmt.write_markup(markup! {
+                ". No fixes needed."
+            })
+        }
+    }
+}
+
+struct SummaryTotal<'a>(&'a TraversalMode, usize, &'a Duration);
+
+impl<'a> fmt::Display for SummaryTotal<'a> {
+    fn fmt(&self, fmt: &mut Formatter) -> io::Result<()> {
+        let files = Files(self.1);
+        match self.0 {
+            TraversalMode::Check { .. } | TraversalMode::Lint { .. } | TraversalMode::CI { .. } => {
+                fmt.write_markup(markup! {
+                    "Checked "{files}" in "{self.2}
+                })
+            }
+            TraversalMode::Format { write, .. } => {
+                if *write {
+                    fmt.write_markup(markup! {
+                        "Formatted "{files}" in "{self.2}
+                    })
+                } else {
+                    fmt.write_markup(markup! {
+                        "Checked "{files}" in "{self.2}
+                    })
+                }
+            }
+
+            TraversalMode::Migrate { write, .. } => {
+                if *write {
+                    fmt.write_markup(markup! {
+                      "Migrated your configuration file in "{self.2}
+                    })
+                } else {
+                    fmt.write_markup(markup! {
+                        "Checked your configuration file in "{self.2}
+                    })
+                }
+            }
+        }
+    }
+}
+
+impl<'a> fmt::Display for SummaryResult<'a> {
+    fn fmt(&self, fmt: &mut Formatter) -> io::Result<()> {
+        let summary = SummaryTotal(
+            self.traversal,
+            self.changed + self.unchanged,
+            &self.duration,
+        );
+        let detail = SummaryDetail(self.changed);
+        fmt.write_markup(markup!(<Info>{summary}{detail}</Info>))?;
 
         if self.errors > 0 {
-            markup!("\n"<Error>"Found "{self.errors}" error(s)"</Error>).fmt(fmt)?
+            if self.errors == 1 {
+                fmt.write_markup(markup!("\n"<Error>"Found "{self.errors}" error."</Error>))?;
+            } else {
+                fmt.write_markup(markup!("\n"<Error>"Found "{self.errors}" errors."</Error>))?;
+            }
+        }
+        if self.warnings > 0 {
+            if self.warnings == 1 {
+                fmt.write_markup(markup!("\n"<Warn>"Found "{self.warnings}" warning."</Warn>))?;
+            } else {
+                fmt.write_markup(markup!("\n"<Warn>"Found "{self.warnings}" warnings."</Warn>))?;
+            }
         }
         Ok(())
     }
@@ -65,7 +154,8 @@ pub(crate) fn traverse(
     let (interner, recv_files) = PathInterner::new();
     let (sender, receiver) = unbounded();
 
-    let processed = AtomicUsize::new(0);
+    let changed = AtomicUsize::new(0);
+    let unchanged = AtomicUsize::new(0);
     let skipped = AtomicUsize::new(0);
 
     let fs = &*session.app.fs;
@@ -100,7 +190,8 @@ pub(crate) fn traverse(
                 workspace,
                 execution: &execution,
                 interner,
-                processed: &processed,
+                changed: &changed,
+                unchanged: &unchanged,
                 skipped: &skipped,
                 messages: sender,
                 remaining_diagnostics: &remaining_diagnostics,
@@ -114,58 +205,22 @@ pub(crate) fn traverse(
 
     let errors = printer.errors();
     let warnings = printer.warnings();
-    let count = processed.load(Ordering::Relaxed);
+    let changed = changed.load(Ordering::Relaxed);
+    let unchanged = unchanged.load(Ordering::Relaxed);
+    let count = changed + unchanged;
     let skipped = skipped.load(Ordering::Relaxed);
 
     if execution.should_report_to_terminal() {
-        match execution.traversal_mode() {
-            TraversalMode::Check { .. } | TraversalMode::Lint { .. } => {
-                if execution.as_fix_file_mode().is_some() {
-                    console.log(markup! {
-                        <Info>"Fixed "{count}" file(s) in "{duration}</Info>
-                    });
-                } else {
-                    console.log(markup!({
-                        CheckResult {
-                            count,
-                            duration,
-                            errors,
-                        }
-                    }));
-                }
-            }
-            TraversalMode::CI { .. } => {
-                console.log(markup!({
-                    CheckResult {
-                        count,
-                        duration,
-                        errors,
-                    }
-                }));
-            }
-            TraversalMode::Format { write: false, .. } => {
-                console.log(markup! {
-                    <Info>"Compared "{count}" file(s) in "{duration}</Info>
-                });
-            }
-            TraversalMode::Format { write: true, .. } => {
-                console.log(markup! {
-                    <Info>"Formatted "{count}" file(s) in "{duration}</Info>
-                });
-            }
-
-            TraversalMode::Migrate { write: false, .. } => {
-                console.log(markup! {
-                    <Info>"Checked your configuration file in "{duration}</Info>
-                });
-            }
-
-            TraversalMode::Migrate { write: true, .. } => {
-                console.log(markup! {
-                    <Info>"Migrated your configuration file in "{duration}</Info>
-                });
-            }
-        }
+        console.log(markup! {
+            {SummaryResult {
+                changed,
+                unchanged,
+                duration,
+                errors,
+                warnings,
+                traversal: execution.traversal_mode()
+            }}
+        });
     } else {
         if let TraversalMode::Format { write, .. } = execution.traversal_mode() {
             let mut summary = FormatterReportSummary::default();
@@ -234,7 +289,7 @@ fn traverse_inputs(fs: &dyn FileSystem, inputs: Vec<OsString>, ctx: &TraversalOp
             scope.spawn(ctx, PathBuf::from(input));
         }
     }));
-    
+
     fs.for_each_path(Box::new(move | path| {
         ctx.handle_file(path)
     }));
@@ -248,37 +303,37 @@ struct DiagnosticsPrinter<'ctx> {
     ///  Execution of the traversal
     execution: &'ctx Execution,
     /// The maximum number of diagnostics the console thread is allowed to print
-    max_diagnostics: u64,
+    max_diagnostics: u32,
     /// The approximate number of diagnostics the console will print before
     /// folding the rest into the "skipped diagnostics" counter
-    remaining_diagnostics: AtomicU64,
+    remaining_diagnostics: AtomicU32,
     /// Mutable reference to a boolean flag tracking whether the console thread
     /// printed any error-level message
-    errors: AtomicUsize,
+    errors: AtomicU32,
     /// Mutable reference to a boolean flag tracking whether the console thread
     /// printed any warnings-level message
-    warnings: AtomicUsize,
+    warnings: AtomicU32,
     /// Whether the console thread should print diagnostics in verbose mode
     verbose: bool,
     /// The diagnostic level the console thread should print
     diagnostic_level: Severity,
 
-    not_printed_diagnostics: AtomicU64,
-    printed_diagnostics: AtomicU64,
+    not_printed_diagnostics: AtomicU32,
+    printed_diagnostics: AtomicU32,
 }
 
 impl<'ctx> DiagnosticsPrinter<'ctx> {
     fn new(execution: &'ctx Execution) -> Self {
         Self {
-            errors: AtomicUsize::new(0),
-            warnings: AtomicUsize::new(0),
-            remaining_diagnostics: AtomicU64::new(0),
+            errors: AtomicU32::new(0),
+            warnings: AtomicU32::new(0),
+            remaining_diagnostics: AtomicU32::new(0),
             execution,
             diagnostic_level: Severity::Hint,
             verbose: false,
             max_diagnostics: 20,
-            not_printed_diagnostics: AtomicU64::new(0),
-            printed_diagnostics: AtomicU64::new(0),
+            not_printed_diagnostics: AtomicU32::new(0),
+            printed_diagnostics: AtomicU32::new(0),
         }
     }
 
@@ -288,7 +343,7 @@ impl<'ctx> DiagnosticsPrinter<'ctx> {
     }
 
     fn with_max_diagnostics(mut self, value: u16) -> Self {
-        self.max_diagnostics = value as u64;
+        self.max_diagnostics = value as u32;
         self
     }
 
@@ -297,11 +352,11 @@ impl<'ctx> DiagnosticsPrinter<'ctx> {
         self
     }
 
-    fn errors(&self) -> usize {
+    fn errors(&self) -> u32 {
         self.errors.load(Ordering::Relaxed)
     }
 
-    fn warnings(&self) -> usize {
+    fn warnings(&self) -> u32 {
         self.warnings.load(Ordering::Relaxed)
     }
 
@@ -356,16 +411,8 @@ impl<'ctx> DiagnosticsPrinter<'ctx> {
                     total_skipped_suggested_fixes += skipped_suggested_fixes;
                 }
 
-                Message::ApplyError(error) => {
-                    // *errors += 1;
+                Message::Failure => {
                     self.errors.fetch_add(1, Ordering::Relaxed);
-                    if self.should_skip_diagnostic(error.severity(), error.tags()) {
-                        continue;
-                    }
-                    let should_print = self.should_print();
-                    if self.execution.should_report_to_terminal() && should_print {
-                        diagnostics_to_print.push(Error::from(error));
-                    }
                 }
 
                 Message::Error(mut err) => {
@@ -589,8 +636,10 @@ pub(crate) struct TraversalOptions<'ctx, 'app> {
     pub(crate) execution: &'ctx Execution,
     /// File paths interner cache used by the filesystem traversal
     interner: PathInterner,
-    /// Shared atomic counter storing the number of processed files
-    processed: &'ctx AtomicUsize,
+    /// Shared atomic counter storing the number of changed files
+    changed: &'ctx AtomicUsize,
+    /// Shared atomic counter storing the number of unchanged files
+    unchanged: &'ctx AtomicUsize,
     /// Shared atomic counter storing the number of skipped files
     skipped: &'ctx AtomicUsize,
     /// Channel sending messages to the display thread
@@ -601,8 +650,11 @@ pub(crate) struct TraversalOptions<'ctx, 'app> {
 }
 
 impl<'ctx, 'app> TraversalOptions<'ctx, 'app> {
-    pub(crate) fn increment_processed(&self) {
-        self.processed.fetch_add(1, Ordering::Relaxed);
+    pub(crate) fn increment_changed(&self) {
+        self.changed.fetch_add(1, Ordering::Relaxed);
+    }
+    pub(crate) fn increment_unchanged(&self) {
+        self.unchanged.fetch_add(1, Ordering::Relaxed);
     }
 
     /// Send a message to the display thread
@@ -610,16 +662,18 @@ impl<'ctx, 'app> TraversalOptions<'ctx, 'app> {
         self.messages.send(msg.into()).ok();
     }
 
-    pub(crate) fn miss_handler_err(&self, err: WorkspaceError, rome_path: &RomePath) {
+    pub(crate) fn miss_handler_err(&self, err: WorkspaceError, biome_path: &BiomePath) {
         self.push_diagnostic(
             err.with_category(category!("files/missingHandler"))
-                .with_file_path(rome_path.display().to_string())
+                .with_file_path(biome_path.display().to_string())
                 .with_tags(DiagnosticTags::VERBOSE),
         );
     }
 
-    pub(crate) fn protected_file(&self, rome_path: &RomePath) {
-        self.push_diagnostic(WorkspaceError::protected_file(rome_path.display().to_string()).into())
+    pub(crate) fn protected_file(&self, biome_path: &BiomePath) {
+        self.push_diagnostic(
+            WorkspaceError::protected_file(biome_path.display().to_string()).into(),
+        )
     }
 }
 
@@ -632,12 +686,18 @@ impl<'ctx, 'app> TraversalContext for TraversalOptions<'ctx, 'app> {
         self.push_message(error);
     }
 
-    fn can_handle(&self, rome_path: &RomePath) -> bool {
-        if rome_path.is_dir() {
+    fn can_handle(&self, biome_path: &BiomePath) -> bool {
+        if !self.fs.path_is_file(biome_path.as_path()) {
+            // handle:
+            // - directories
+            // - symlinks
+            // - unresolved symlinks
+            //   e.g `symlink/subdir` where symlink points to a directory that includes `subdir`.
+            //   Note that `symlink/subdir` is not an existing file.
             let can_handle = !self
                 .workspace
                 .is_path_ignored(IsPathIgnoredParams {
-                    rome_path: rome_path.clone(),
+                    biome_path: biome_path.clone(),
                     feature: self.execution.as_feature_name(),
                 })
                 .unwrap_or_else(|err| {
@@ -648,7 +708,7 @@ impl<'ctx, 'app> TraversalContext for TraversalOptions<'ctx, 'app> {
         }
 
         let file_features = self.workspace.file_features(SupportsFeatureParams {
-            path: rome_path.clone(),
+            path: biome_path.clone(),
             feature: FeaturesBuilder::new()
                 .with_linter()
                 .with_formatter()
@@ -659,19 +719,19 @@ impl<'ctx, 'app> TraversalContext for TraversalOptions<'ctx, 'app> {
         let file_features = match file_features {
             Ok(file_features) => {
                 if file_features.is_protected() {
-                    self.protected_file(rome_path);
+                    self.protected_file(biome_path);
                     return false;
                 }
 
                 if file_features.is_not_supported() && !file_features.is_ignored() {
                     // we should throw a diagnostic if we can't handle a file that isn't ignored
-                    self.miss_handler_err(extension_error(rome_path), rome_path);
+                    self.miss_handler_err(extension_error(biome_path), biome_path);
                     return false;
                 }
                 file_features
             }
             Err(err) => {
-                self.miss_handler_err(err, rome_path);
+                self.miss_handler_err(err, biome_path);
 
                 return false;
             }
@@ -703,16 +763,24 @@ impl<'ctx, 'app> TraversalContext for TraversalOptions<'ctx, 'app> {
 /// traversal function returns Err or panics)
 fn handle_file<F>(ctx: &TraversalOptions, path: &Path, func: F) where F: Fn(&TraversalOptions, &Path) -> FileResult + UnwindSafe {
     match catch_unwind(move || func(ctx, path)) {
-        Ok(Ok(FileStatus::Success)) => {}
+        Ok(Ok(FileStatus::Changed)) => {
+            ctx.increment_changed();
+        }
+        Ok(Ok(FileStatus::Unchanged)) => {
+            ctx.increment_unchanged();
+        }
         Ok(Ok(FileStatus::Stored)) => {}
         Ok(Ok(FileStatus::Message(msg))) => {
+            ctx.increment_unchanged();
             ctx.push_message(msg);
         }
         Ok(Ok(FileStatus::Protected(file_path))) => {
+            ctx.increment_unchanged();
             ctx.push_diagnostic(WorkspaceError::protected_file(file_path).into());
         }
         Ok(Ok(FileStatus::Ignored)) => {}
         Ok(Err(err)) => {
+            ctx.increment_unchanged();
             ctx.skipped.fetch_add(1, Ordering::Relaxed);
             ctx.push_message(err);
         }

@@ -57,7 +57,7 @@ declare_rule! {
     /// function f() { return CONSTANT; }
     /// const CONSTANT = 0;
     /// ```
-    pub(crate) NoInvalidUseBeforeDeclaration {
+    pub NoInvalidUseBeforeDeclaration {
         version: "1.5.0",
         name: "noInvalidUseBeforeDeclaration",
         source: RuleSource::EslintTypeScript("no-use-before-define"),
@@ -85,19 +85,20 @@ impl Rule for NoInvalidUseBeforeDeclaration {
             let Ok(declaration_kind) = DeclarationKind::try_from(&declaration) else {
                 continue;
             };
-            let declaration_control_flow_root = if matches!(
-                declaration,
-                AnyJsBindingDeclaration::JsVariableDeclarator(_)
-            ) {
-                declaration
-                    .syntax()
-                    .ancestors()
-                    .skip(1)
-                    .find(|ancestor| AnyJsControlFlowRoot::can_cast(ancestor.kind()))
-            } else {
-                None
-            };
             let declaration_end = declaration.range().end();
+            let declaration_control_flow_root =
+                if let AnyJsBindingDeclaration::JsVariableDeclarator(declarator) = declaration
+                    .parent_binding_pattern_declaration()
+                    .unwrap_or(declaration)
+                {
+                    declarator
+                        .syntax()
+                        .ancestors()
+                        .skip(1)
+                        .find(|ancestor| AnyJsControlFlowRoot::can_cast(ancestor.kind()))
+                } else {
+                    None
+                };
             for reference in binding.all_references() {
                 let reference_range = reference.range();
                 if reference_range.start() < declaration_end
@@ -175,14 +176,14 @@ impl Rule for NoInvalidUseBeforeDeclaration {
 }
 
 #[derive(Debug)]
-pub(crate) struct InvalidUseBeforeDeclaration {
+pub struct InvalidUseBeforeDeclaration {
     declaration_kind: DeclarationKind,
     reference_range: TextRange,
     binding_range: TextRange,
 }
 
 #[derive(Debug, Copy, Clone)]
-pub(crate) enum DeclarationKind {
+pub enum DeclarationKind {
     Parameter,
     Variable,
 }
@@ -193,7 +194,12 @@ impl TryFrom<&AnyJsBindingDeclaration> for DeclarationKind {
     fn try_from(value: &AnyJsBindingDeclaration) -> Result<Self, Self::Error> {
         match value {
             // Variable declaration
-            AnyJsBindingDeclaration::JsVariableDeclarator(_) => Ok(DeclarationKind::Variable),
+            AnyJsBindingDeclaration::JsArrayBindingPatternElement(_)
+            | AnyJsBindingDeclaration::JsArrayBindingPatternRestElement(_)
+            | AnyJsBindingDeclaration::JsObjectBindingPatternProperty(_)
+            | AnyJsBindingDeclaration::JsObjectBindingPatternRest(_)
+            | AnyJsBindingDeclaration::JsObjectBindingPatternShorthandProperty(_)
+            | AnyJsBindingDeclaration::JsVariableDeclarator(_) => Ok(DeclarationKind::Variable),
             // Parameters
             AnyJsBindingDeclaration::JsFormalParameter(_)
             | AnyJsBindingDeclaration::JsRestParameter(_)

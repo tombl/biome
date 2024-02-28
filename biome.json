@@ -1,10 +1,6 @@
 {
 	"$schema": "./packages/@biomejs/biome/configuration_schema.json",
-	"vcs": {
-		"clientKind": "git",
-		"enabled": true,
-		"useIgnoreFile": true
-	},
+	"extends": ["shared/biome"],
 	"files": {
 		"ignore": [
 			"dist/**",
@@ -13,36 +9,11 @@
 			"public/**",
 			"**/__snapshots__",
 			"**/editors/intellij/**",
-			"*.astro",
-			"*.mdx",
-			"*.md",
-			"*.css",
-			"*.scss",
-			"*.svg",
-			"*.png",
-			"*.yml",
-			"*.yaml",
-			"*.snap",
 			"**/undefined/**",
-			"LICENSE-MIT",
-			"LICENSE-APACHE",
-			"ROME_LICENSE",
-			"ROME-LICENSE-MIT"
+			"_fonts/**"
 		]
 	},
 	"formatter": {
 		"ignore": ["configuration-schema.json"]
-	},
-	"linter": {
-		"enabled": true,
-		"rules": {
-			"recommended": true,
-			"style": {
-				"noNonNullAssertion": "off"
-			}
-		}
-	},
-	"organizeImports": {
-		"enabled": true
 	}
 }

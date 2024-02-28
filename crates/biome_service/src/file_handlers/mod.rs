@@ -2,29 +2,37 @@ use self::{
     css::CssFileHandler, javascript::JsFileHandler, json::JsonFileHandler,
     unknown::UnknownFileHandler,
 };
+pub use crate::file_handlers::astro::{AstroFileHandler, ASTRO_FENCE};
+pub use crate::file_handlers::svelte::{SvelteFileHandler, SVELTE_FENCE};
+pub use crate::file_handlers::vue::{VueFileHandler, VUE_FENCE};
 use crate::workspace::{FixFileMode, OrganizeImportsResult};
 use crate::{
     settings::SettingsHandle,
     workspace::{FixFileResult, GetSyntaxTreeResult, PullActionsResult, RenameResult},
     Rules, WorkspaceError,
 };
-use biome_analyze::{AnalysisFilter, AnalyzerDiagnostic};
+use biome_analyze::{AnalysisFilter, AnalyzerDiagnostic, RuleCategories};
 use biome_console::fmt::Formatter;
 use biome_console::markup;
+use biome_css_formatter::can_format_css_yet;
 use biome_diagnostics::{Diagnostic, Severity};
 use biome_formatter::Printed;
-use biome_fs::RomePath;
+use biome_fs::BiomePath;
 use biome_js_syntax::{JsFileSource, TextRange, TextSize};
 use biome_parser::AnyParse;
+use biome_project::PackageJson;
 use biome_rowan::NodeCache;
 pub use javascript::JsFormatterSettings;
 use std::ffi::OsStr;
 use std::path::Path;
 
+mod astro;
 mod css;
 mod javascript;
 mod json;
+mod svelte;
 mod unknown;
+mod vue;
 
 /// Supported languages by Biome
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Default, serde::Serialize, serde::Deserialize)]
@@ -44,6 +52,12 @@ pub enum Language {
     Jsonc,
     /// CSS
     Css,
+    ///
+    Astro,
+    ///
+    Vue,
+    ///
+    Svelte,
     /// Any language that is not supported
     #[default]
     Unknown,
@@ -51,7 +65,7 @@ pub enum Language {
 
 impl Language {
     /// Sorted array of files that are known as JSONC (JSON with comments).
-    pub(crate) const KNOWN_FILES_AS_JSONC: &'static [&'static str; 12] = &[
+    pub(crate) const KNOWN_FILES_AS_JSONC: &'static [&'static str; 15] = &[
         ".babelrc",
         ".babelrc.json",
         ".ember-cli",
@@ -62,8 +76,11 @@ impl Language {
         ".jshintrc",
         ".swcrc",
         "babel.config.json",
+        "jsconfig.json",
+        "tsconfig.json",
         "tslint.json",
         "typedoc.json",
+        "typescript.json",
     ];
 
     /// Returns the language corresponding to this file extension
@@ -75,16 +92,16 @@ impl Language {
             "tsx" => Language::TypeScriptReact,
             "json" => Language::Json,
             "jsonc" => Language::Jsonc,
+            "astro" => Language::Astro,
+            "vue" => Language::Vue,
+            "svelte" => Language::Svelte,
             "css" => Language::Css,
             _ => Language::Unknown,
         }
     }
 
     pub fn from_known_filename(s: &str) -> Self {
-        if Self::KNOWN_FILES_AS_JSONC
-            .binary_search(&s.to_lowercase().as_str())
-            .is_ok()
-        {
+        if Self::KNOWN_FILES_AS_JSONC.binary_search(&s).is_ok() {
             Language::Jsonc
         } else {
             Language::Unknown
@@ -126,6 +143,9 @@ impl Language {
             "typescriptreact" => Language::TypeScriptReact,
             "json" => Language::Json,
             "jsonc" => Language::Jsonc,
+            "astro" => Language::Astro,
+            "vue" => Language::Vue,
+            "svelte" => Language::Svelte,
             // TODO: remove this when we are ready to handle CSS files
             "css" => Language::Unknown,
             _ => Language::Unknown,
@@ -169,6 +189,8 @@ impl Language {
                 | Language::TypeScript
                 | Language::JavaScriptReact
                 | Language::TypeScriptReact
+                | Language::Astro
+                | Language::Vue
         )
     }
 
@@ -186,7 +208,27 @@ impl Language {
             Language::JavaScriptReact => Some(JsFileSource::jsx()),
             Language::TypeScript => Some(JsFileSource::tsx()),
             Language::TypeScriptReact => Some(JsFileSource::tsx()),
+            Language::Astro => Some(JsFileSource::ts()),
+            Language::Vue => Some(JsFileSource::ts()),
+            Language::Svelte => Some(JsFileSource::ts()),
             Language::Json | Language::Jsonc | Language::Css | Language::Unknown => None,
+        }
+    }
+
+    pub fn can_parse(path: &Path, content: &str) -> bool {
+        let language = Language::from_path(path);
+        match language {
+            Language::JavaScript
+            | Language::JavaScriptReact
+            | Language::TypeScript
+            | Language::TypeScriptReact
+            | Language::Json
+            | Language::Css
+            | Language::Jsonc => true,
+            Language::Astro => ASTRO_FENCE.is_match(content),
+            Language::Vue => VUE_FENCE.is_match(content),
+            Language::Svelte => SVELTE_FENCE.is_match(content),
+            Language::Unknown => false,
         }
     }
 }
@@ -201,6 +243,9 @@ impl biome_console::fmt::Display for Language {
             Language::Json => fmt.write_markup(markup! { "JSON" }),
             Language::Jsonc => fmt.write_markup(markup! { "JSONC" }),
             Language::Css => fmt.write_markup(markup! { "CSS" }),
+            Language::Astro => fmt.write_markup(markup! { "Astro" }),
+            Language::Vue => fmt.write_markup(markup! { "Vue" }),
+            Language::Svelte => fmt.write_markup(markup! { "Svelte" }),
             Language::Unknown => fmt.write_markup(markup! { "Unknown" }),
         }
     }
@@ -240,7 +285,9 @@ pub struct FixAllParams<'a> {
     pub(crate) settings: SettingsHandle<'a>,
     /// Whether it should format the code action
     pub(crate) should_format: bool,
-    pub(crate) rome_path: &'a RomePath,
+    pub(crate) biome_path: &'a BiomePath,
+    pub(crate) manifest: Option<PackageJson>,
+    pub(crate) language: Language,
 }
 
 #[derive(Default)]
@@ -252,7 +299,13 @@ pub struct Capabilities {
     pub(crate) formatter: FormatterCapabilities,
 }
 
-type Parse = fn(&RomePath, Language, &str, SettingsHandle, &mut NodeCache) -> AnyParse;
+#[derive(Clone)]
+pub struct ParseResult {
+    pub(crate) any_parse: AnyParse,
+    pub(crate) language: Option<Language>,
+}
+
+type Parse = fn(&BiomePath, Language, &str, SettingsHandle, &mut NodeCache) -> ParseResult;
 
 #[derive(Default)]
 pub struct ParserCapabilities {
@@ -260,9 +313,9 @@ pub struct ParserCapabilities {
     pub(crate) parse: Option<Parse>,
 }
 
-type DebugSyntaxTree = fn(&RomePath, AnyParse) -> GetSyntaxTreeResult;
+type DebugSyntaxTree = fn(&BiomePath, AnyParse) -> GetSyntaxTreeResult;
 type DebugControlFlow = fn(AnyParse, TextSize) -> String;
-type DebugFormatterIR = fn(&RomePath, AnyParse, SettingsHandle) -> Result<String, WorkspaceError>;
+type DebugFormatterIR = fn(&BiomePath, AnyParse, SettingsHandle) -> Result<String, WorkspaceError>;
 
 #[derive(Default)]
 pub struct DebugCapabilities {
@@ -276,25 +329,34 @@ pub struct DebugCapabilities {
 
 pub(crate) struct LintParams<'a> {
     pub(crate) parse: AnyParse,
-    pub(crate) filter: AnalysisFilter<'a>,
-    pub(crate) rules: Option<&'a Rules>,
     pub(crate) settings: SettingsHandle<'a>,
     pub(crate) language: Language,
-    pub(crate) max_diagnostics: u64,
-    pub(crate) path: &'a RomePath,
+    pub(crate) max_diagnostics: u32,
+    pub(crate) path: &'a BiomePath,
+    pub(crate) categories: RuleCategories,
+    pub(crate) manifest: Option<PackageJson>,
 }
 
 pub(crate) struct LintResults {
     pub(crate) diagnostics: Vec<biome_diagnostics::serde::Diagnostic>,
     pub(crate) errors: usize,
-    pub(crate) skipped_diagnostics: u64,
+    pub(crate) skipped_diagnostics: u32,
+}
+
+pub(crate) struct CodeActionsParams<'a> {
+    pub(crate) parse: AnyParse,
+    pub(crate) range: TextRange,
+    pub(crate) rules: Option<&'a Rules>,
+    pub(crate) settings: SettingsHandle<'a>,
+    pub(crate) path: &'a BiomePath,
+    pub(crate) manifest: Option<PackageJson>,
+    pub(crate) language: Language,
 }
 
 type Lint = fn(LintParams) -> LintResults;
-type CodeActions =
-    fn(AnyParse, TextRange, Option<&Rules>, SettingsHandle, &RomePath) -> PullActionsResult;
+type CodeActions = fn(CodeActionsParams) -> PullActionsResult;
 type FixAll = fn(FixAllParams) -> Result<FixFileResult, WorkspaceError>;
-type Rename = fn(&RomePath, AnyParse, TextSize, String) -> Result<RenameResult, WorkspaceError>;
+type Rename = fn(&BiomePath, AnyParse, TextSize, String) -> Result<RenameResult, WorkspaceError>;
 type OrganizeImports = fn(AnyParse) -> Result<OrganizeImportsResult, WorkspaceError>;
 
 #[derive(Default)]
@@ -311,11 +373,11 @@ pub struct AnalyzerCapabilities {
     pub(crate) organize_imports: Option<OrganizeImports>,
 }
 
-type Format = fn(&RomePath, AnyParse, SettingsHandle) -> Result<Printed, WorkspaceError>;
+type Format = fn(&BiomePath, AnyParse, SettingsHandle) -> Result<Printed, WorkspaceError>;
 type FormatRange =
-    fn(&RomePath, AnyParse, SettingsHandle, TextRange) -> Result<Printed, WorkspaceError>;
+    fn(&BiomePath, AnyParse, SettingsHandle, TextRange) -> Result<Printed, WorkspaceError>;
 type FormatOnType =
-    fn(&RomePath, AnyParse, SettingsHandle, TextSize) -> Result<Printed, WorkspaceError>;
+    fn(&BiomePath, AnyParse, SettingsHandle, TextSize) -> Result<Printed, WorkspaceError>;
 
 #[derive(Default)]
 pub(crate) struct FormatterCapabilities {
@@ -360,6 +422,9 @@ pub(crate) struct Features {
     json: JsonFileHandler,
     #[allow(unused)]
     css: CssFileHandler,
+    astro: AstroFileHandler,
+    vue: VueFileHandler,
+    svelte: SvelteFileHandler,
     unknown: UnknownFileHandler,
 }
 
@@ -369,24 +434,36 @@ impl Features {
             js: JsFileHandler {},
             json: JsonFileHandler {},
             css: CssFileHandler {},
+            astro: AstroFileHandler {},
+            vue: VueFileHandler {},
+            svelte: SvelteFileHandler {},
             unknown: UnknownFileHandler::default(),
         }
     }
 
-    /// Returns the [Capabilities] associated with a [RomePath]
+    /// Returns the [Capabilities] associated with a [BiomePath]
     pub(crate) fn get_capabilities(
         &self,
-        rome_path: &RomePath,
+        biome_path: &BiomePath,
         language_hint: Language,
     ) -> Capabilities {
-        match Language::from_path_and_known_filename(rome_path).or(language_hint) {
+        match Language::from_path_and_known_filename(biome_path).or(language_hint) {
             Language::JavaScript
             | Language::JavaScriptReact
             | Language::TypeScript
             | Language::TypeScriptReact => self.js.capabilities(),
             Language::Json | Language::Jsonc => self.json.capabilities(),
-            // TODO: change this when we are ready to handle CSS files
-            Language::Css => self.unknown.capabilities(),
+            Language::Css => {
+                // TODO: change this when we are ready to handle CSS files
+                if can_format_css_yet() {
+                    self.css.capabilities()
+                } else {
+                    self.unknown.capabilities()
+                }
+            }
+            Language::Astro => self.astro.capabilities(),
+            Language::Vue => self.vue.capabilities(),
+            Language::Svelte => self.svelte.capabilities(),
             Language::Unknown => self.unknown.capabilities(),
         }
     }

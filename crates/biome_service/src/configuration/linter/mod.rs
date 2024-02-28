@@ -5,12 +5,11 @@ pub use crate::configuration::linter::rules::Rules;
 use crate::configuration::overrides::OverrideLinterConfiguration;
 use crate::settings::{to_matcher, LinterSettings};
 use crate::{Matcher, WorkspaceError};
-use biome_deserialize::{
-    DeserializableValue, DeserializationDiagnostic, Merge, StringSet, VisitableType,
-};
-use biome_deserialize_macros::{Deserializable, Merge, NoneState};
+use biome_analyze::options::RuleOptions;
+use biome_deserialize::{Deserializable, StringSet};
+use biome_deserialize::{DeserializableValue, DeserializationDiagnostic, Merge, VisitableType};
+use biome_deserialize_macros::{Deserializable, Merge, Partial};
 use biome_diagnostics::Severity;
-use biome_js_analyze::options::PossibleOptions;
 use bpaf::Bpaf;
 pub use rules::*;
 #[cfg(feature = "schema")]
@@ -19,64 +18,66 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::str::FromStr;
 
-#[derive(
-    Bpaf, Clone, Debug, Deserialize, Deserializable, Eq, Merge, NoneState, PartialEq, Serialize,
-)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-#[deserializable(from_none)]
-#[serde(rename_all = "camelCase", default, deny_unknown_fields)]
+#[derive(Clone, Debug, Deserialize, Eq, Partial, PartialEq, Serialize)]
+#[partial(derive(Bpaf, Clone, Deserializable, Eq, Merge, PartialEq))]
+#[partial(cfg_attr(feature = "schema", derive(schemars::JsonSchema)))]
+#[partial(serde(rename_all = "camelCase", default, deny_unknown_fields))]
 pub struct LinterConfiguration {
     /// if `false`, it disables the feature and the linter won't be executed. `true` by default
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[bpaf(hide)]
-    pub enabled: Option<bool>,
+    #[partial(bpaf(hide))]
+    pub enabled: bool,
 
     /// List of rules
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[bpaf(pure(Rules::default()), optional, hide)]
-    pub rules: Option<Rules>,
+    #[partial(bpaf(pure(Default::default()), optional, hide))]
+    pub rules: Rules,
 
     /// A list of Unix shell style patterns. The formatter will ignore files/folders that will
     /// match these patterns.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[bpaf(hide)]
-    pub ignore: Option<StringSet>,
+    #[partial(bpaf(hide))]
+    pub ignore: StringSet,
 
     /// A list of Unix shell style patterns. The formatter will include files/folders that will
     /// match these patterns.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[bpaf(hide)]
-    pub include: Option<StringSet>,
+    #[partial(bpaf(hide))]
+    pub include: StringSet,
 }
 
 impl LinterConfiguration {
     pub const fn is_disabled(&self) -> bool {
-        matches!(self.enabled, Some(false))
+        !self.enabled
     }
 }
 
 impl Default for LinterConfiguration {
     fn default() -> Self {
         Self {
-            enabled: Some(true),
-            rules: Some(Rules::default()),
-            ignore: None,
-            include: None,
+            enabled: true,
+            rules: Default::default(),
+            ignore: Default::default(),
+            include: Default::default(),
         }
+    }
+}
+
+impl PartialLinterConfiguration {
+    pub const fn is_disabled(&self) -> bool {
+        matches!(self.enabled, Some(false))
+    }
+
+    pub fn get_rules(&self) -> Rules {
+        self.rules.as_ref().unwrap_or(&Rules::default()).clone()
     }
 }
 
 pub fn to_linter_settings(
     working_directory: Option<PathBuf>,
     conf: LinterConfiguration,
-    _vcs_path: Option<PathBuf>,
-    _gitignore_matches: &[String],
 ) -> Result<LinterSettings, WorkspaceError> {
     Ok(LinterSettings {
-        enabled: conf.enabled.unwrap_or_default(),
-        rules: conf.rules,
-        ignored_files: to_matcher(working_directory.clone(), conf.ignore.as_ref(), None, &[])?,
-        included_files: to_matcher(working_directory.clone(), conf.include.as_ref(), None, &[])?,
+        enabled: conf.enabled,
+        rules: Some(conf.rules),
+        ignored_files: to_matcher(working_directory.clone(), Some(&conf.ignore))?,
+        included_files: to_matcher(working_directory.clone(), Some(&conf.include))?,
     })
 }
 
@@ -96,28 +97,27 @@ impl TryFrom<OverrideLinterConfiguration> for LinterSettings {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[cfg_attr(feature = "schema", derive(JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields, untagged)]
-pub enum RuleConfiguration {
+pub enum RuleConfiguration<T: Default> {
     Plain(RulePlainConfiguration),
-    WithOptions(Box<RuleWithOptions>),
+    WithOptions(RuleWithOptions<T>),
 }
 
-impl biome_deserialize::Deserializable for RuleConfiguration {
+impl<T: Default + Deserializable> Deserializable for RuleConfiguration<T> {
     fn deserialize(
         value: &impl DeserializableValue,
         rule_name: &str,
         diagnostics: &mut Vec<DeserializationDiagnostic>,
     ) -> Option<Self> {
         if value.is_type(VisitableType::STR) {
-            biome_deserialize::Deserializable::deserialize(value, rule_name, diagnostics)
-                .map(Self::Plain)
+            Deserializable::deserialize(value, rule_name, diagnostics).map(Self::Plain)
         } else {
-            biome_deserialize::Deserializable::deserialize(value, rule_name, diagnostics)
-                .map(|rule| Self::WithOptions(Box::new(rule)))
+            Deserializable::deserialize(value, rule_name, diagnostics)
+                .map(|rule| Self::WithOptions(rule))
         }
     }
 }
 
-impl FromStr for RuleConfiguration {
+impl<T: Default> FromStr for RuleConfiguration<T> {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -126,7 +126,7 @@ impl FromStr for RuleConfiguration {
     }
 }
 
-impl RuleConfiguration {
+impl<T: Default> RuleConfiguration<T> {
     pub fn is_err(&self) -> bool {
         if let Self::WithOptions(rule) = self {
             rule.level == RulePlainConfiguration::Error
@@ -146,61 +146,63 @@ impl RuleConfiguration {
     pub fn is_enabled(&self) -> bool {
         !self.is_disabled()
     }
-}
 
-impl Default for RuleConfiguration {
-    fn default() -> Self {
-        Self::Plain(RulePlainConfiguration::Error)
+    pub fn level(&self) -> RulePlainConfiguration {
+        match self {
+            RuleConfiguration::Plain(plain) => *plain,
+            RuleConfiguration::WithOptions(options) => options.level,
+        }
     }
 }
 
 // Rule configuration has a custom [Merge] implementation so that overriding the
 // severity doesn't override the options.
-impl Merge for RuleConfiguration {
+impl<T: Clone + Default> Merge for RuleConfiguration<T> {
     fn merge_with(&mut self, other: Self) {
         *self = match (&self, other) {
-            (Self::WithOptions(this), Self::Plain(other)) => {
-                Self::WithOptions(Box::new(RuleWithOptions {
-                    level: other,
-                    options: this.options.clone(),
-                }))
-            }
+            (Self::WithOptions(this), Self::Plain(other)) => Self::WithOptions(RuleWithOptions {
+                level: other,
+                options: this.options.clone(),
+            }),
             // FIXME: Rule options don't have a `NoneState`, so we can't deep
             //        merge them yet. For now, if an override specifies options,
             //        it will still override *all* options.
             (_, other) => other,
         };
     }
+}
 
-    fn merge_in_defaults(&mut self) {
-        match (&self, Self::default()) {
-            (Self::Plain(this), Self::WithOptions(default)) => {
-                *self = Self::WithOptions(Box::new(RuleWithOptions {
-                    level: this.clone(),
-                    options: default.options,
-                }));
-            }
-            (_, _) => {
-                // Don't overwrite other values with default.
+impl<T: Clone + Default + 'static> RuleConfiguration<T> {
+    pub fn get_options(&self) -> Option<RuleOptions> {
+        match self {
+            RuleConfiguration::Plain(_) => None,
+            RuleConfiguration::WithOptions(options) => {
+                Some(RuleOptions::new(options.options.clone()))
             }
         }
     }
 }
 
-impl From<&RuleConfiguration> for Severity {
-    fn from(conf: &RuleConfiguration) -> Self {
+impl<T: Default> Default for RuleConfiguration<T> {
+    fn default() -> Self {
+        Self::Plain(RulePlainConfiguration::Error)
+    }
+}
+
+impl<T: Default> From<&RuleConfiguration<T>> for Severity {
+    fn from(conf: &RuleConfiguration<T>) -> Self {
         match conf {
-            RuleConfiguration::Plain(p) => p.into(),
+            RuleConfiguration::Plain(p) => (*p).into(),
             RuleConfiguration::WithOptions(conf) => {
                 let level = &conf.level;
-                level.into()
+                (*level).into()
             }
         }
     }
 }
 
-impl From<&RulePlainConfiguration> for Severity {
-    fn from(conf: &RulePlainConfiguration) -> Self {
+impl From<RulePlainConfiguration> for Severity {
+    fn from(conf: RulePlainConfiguration) -> Self {
         match conf {
             RulePlainConfiguration::Warn => Severity::Warning,
             RulePlainConfiguration::Error => Severity::Error,
@@ -209,7 +211,7 @@ impl From<&RulePlainConfiguration> for Severity {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Deserializable, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Deserializable, Eq, PartialEq, Serialize)]
 #[cfg_attr(feature = "schema", derive(JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub enum RulePlainConfiguration {
@@ -235,20 +237,7 @@ impl FromStr for RulePlainConfiguration {
 #[derive(Clone, Debug, Default, Deserialize, Deserializable, Eq, PartialEq, Serialize)]
 #[cfg_attr(feature = "schema", derive(JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct RuleWithOptions {
+pub struct RuleWithOptions<T: Default> {
     pub level: RulePlainConfiguration,
-
-    #[deserializable(passthrough_name)]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub options: Option<PossibleOptions>,
-}
-
-impl FromStr for RuleWithOptions {
-    type Err = String;
-    fn from_str(_s: &str) -> Result<Self, Self::Err> {
-        Ok(Self {
-            level: RulePlainConfiguration::default(),
-            options: None,
-        })
-    }
+    pub options: T,
 }

@@ -11,7 +11,10 @@ use biome_analyze::{
 };
 use biome_console::markup;
 use biome_diagnostics::Applicability;
-use biome_js_factory::make::{js_string_literal, js_string_literal_expression, jsx_string};
+use biome_js_factory::make::{
+    js_string_literal, js_string_literal_expression, js_template_chunk, js_template_chunk_element,
+    jsx_string,
+};
 use biome_rowan::{AstNode, BatchMutationExt};
 use lazy_static::lazy_static;
 
@@ -134,7 +137,7 @@ declare_rule! {
     ///
     /// This is a deliberate decision. We're unsure about this behavior, and would appreciate feedback on it. If this is a problem for you, please share a detailed explanation of your use case in [the GitHub issue](https://github.com/biomejs/biome/issues/1274).
     ///
-    pub(crate) UseSortedClasses {
+    pub UseSortedClasses {
         version: "next",
         name: "useSortedClasses",
         recommended: false,
@@ -153,7 +156,7 @@ impl Rule for UseSortedClasses {
     type Query = Ast<AnyClassStringLike>;
     type State = String;
     type Signals = Option<Self::State>;
-    type Options = UtilityClassSortingOptions;
+    type Options = Box<UtilityClassSortingOptions>;
 
     fn run(ctx: &RuleContext<Self>) -> Option<Self::State> {
         let options = ctx.options();
@@ -189,7 +192,10 @@ impl Rule for UseSortedClasses {
                 let replacement = jsx_string(js_string_literal(state));
                 mutation.replace_node(jsx_string_node.clone(), replacement);
             }
-            AnyClassStringLike::JsTemplateChunkElement(_) => return None,
+            AnyClassStringLike::JsTemplateChunkElement(chunk) => {
+                let replacement = js_template_chunk_element(js_template_chunk(state));
+                mutation.replace_node(chunk.clone(), replacement);
+            }
         };
 
         Some(JsRuleAction {

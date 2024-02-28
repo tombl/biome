@@ -2,10 +2,10 @@
 import type { Transport } from "./transport";
 export interface SupportsFeatureParams {
 	feature: FeatureName[];
-	path: RomePath;
+	path: BiomePath;
 }
 export type FeatureName = "Format" | "Lint" | "OrganizeImports";
-export interface RomePath {
+export interface BiomePath {
 	path: string;
 }
 export interface SupportsFeatureResult {
@@ -18,7 +18,7 @@ export type SupportKind =
 	| "FeatureNotEnabled"
 	| "FileNotSupported";
 export interface UpdateSettingsParams {
-	configuration: Configuration;
+	configuration: PartialConfiguration;
 	gitignore_matches: string[];
 	vcs_base_path?: string;
 	working_directory?: string;
@@ -26,7 +26,7 @@ export interface UpdateSettingsParams {
 /**
  * The configuration that is contained inside the file `biome.json`
  */
-export interface Configuration {
+export interface PartialConfiguration {
 	/**
 	 * A field for the [JSON schema](https://json-schema.org/) specification
 	 */
@@ -34,7 +34,7 @@ export interface Configuration {
 	/**
 	 * Specific configuration for the Css language
 	 */
-	css?: CssConfiguration;
+	css?: PartialCssConfiguration;
 	/**
 	 * A list of paths to other JSON files, used to extends the current configuration.
 	 */
@@ -42,27 +42,27 @@ export interface Configuration {
 	/**
 	 * The configuration of the filesystem
 	 */
-	files?: FilesConfiguration;
+	files?: PartialFilesConfiguration;
 	/**
 	 * The configuration of the formatter
 	 */
-	formatter?: FormatterConfiguration;
+	formatter?: PartialFormatterConfiguration;
 	/**
 	 * Specific configuration for the JavaScript language
 	 */
-	javascript?: JavascriptConfiguration;
+	javascript?: PartialJavascriptConfiguration;
 	/**
 	 * Specific configuration for the Json language
 	 */
-	json?: JsonConfiguration;
+	json?: PartialJsonConfiguration;
 	/**
 	 * The configuration for the linter
 	 */
-	linter?: LinterConfiguration;
+	linter?: PartialLinterConfiguration;
 	/**
 	 * The configuration of the import sorting
 	 */
-	organizeImports?: OrganizeImports;
+	organizeImports?: PartialOrganizeImports;
 	/**
 	 * A list of granular patterns that should be applied only to a sub set of files
 	 */
@@ -70,26 +70,26 @@ export interface Configuration {
 	/**
 	 * The configuration of the VCS integration
 	 */
-	vcs?: VcsConfiguration;
+	vcs?: PartialVcsConfiguration;
 }
 /**
  * Options applied to CSS files
  */
-export interface CssConfiguration {
+export interface PartialCssConfiguration {
 	/**
 	 * Formatting options
 	 */
-	formatter?: CssFormatter;
+	formatter?: PartialCssFormatter;
 	/**
 	 * Parsing options
 	 */
-	parser?: CssParser;
+	parser?: PartialCssParser;
 }
 export type StringSet = string[];
 /**
  * The configuration of the filesystem
  */
-export interface FilesConfiguration {
+export interface PartialFilesConfiguration {
 	/**
 	 * A list of Unix shell style patterns. Biome will ignore files/folders that will match these patterns.
 	 */
@@ -110,7 +110,11 @@ export interface FilesConfiguration {
 /**
  * Generic options applied to all files
  */
-export interface FormatterConfiguration {
+export interface PartialFormatterConfiguration {
+	/**
+	 * The attribute position style. By default auto.
+	 */
+	attributePosition?: AttributePosition;
 	enabled?: boolean;
 	/**
 	 * Stores whether formatting should be allowed to proceed if a given file has syntax errors
@@ -148,37 +152,37 @@ export interface FormatterConfiguration {
 /**
  * A set of options applied to the JavaScript files
  */
-export interface JavascriptConfiguration {
+export interface PartialJavascriptConfiguration {
 	/**
 	 * Formatting options
 	 */
-	formatter?: JavascriptFormatter;
+	formatter?: PartialJavascriptFormatter;
 	/**
 	* A list of global bindings that should be ignored by the analyzers
 
 If defined here, they should not emit diagnostics. 
 	 */
 	globals?: StringSet;
-	organize_imports?: JavascriptOrganizeImports;
+	organize_imports?: PartialJavascriptOrganizeImports;
 	/**
 	 * Parsing options
 	 */
-	parser?: JavascriptParser;
+	parser?: PartialJavascriptParser;
 }
 /**
  * Options applied to JSON files
  */
-export interface JsonConfiguration {
+export interface PartialJsonConfiguration {
 	/**
 	 * Formatting options
 	 */
-	formatter?: JsonFormatter;
+	formatter?: PartialJsonFormatter;
 	/**
 	 * Parsing options
 	 */
-	parser?: JsonParser;
+	parser?: PartialJsonParser;
 }
-export interface LinterConfiguration {
+export interface PartialLinterConfiguration {
 	/**
 	 * if `false`, it disables the feature and the linter won't be executed. `true` by default
 	 */
@@ -196,7 +200,7 @@ export interface LinterConfiguration {
 	 */
 	rules?: Rules;
 }
-export interface OrganizeImports {
+export interface PartialOrganizeImports {
 	/**
 	 * Enables the organization of imports
 	 */
@@ -214,7 +218,7 @@ export type Overrides = OverridePattern[];
 /**
  * Set of properties to integrate Biome with a VCS software.
  */
-export interface VcsConfiguration {
+export interface PartialVcsConfiguration {
 	/**
 	 * The kind of client.
 	 */
@@ -238,7 +242,7 @@ If Biome can't find the configuration, it will attempt to use the current workin
 	 */
 	useIgnoreFile?: boolean;
 }
-export interface CssFormatter {
+export interface PartialCssFormatter {
 	/**
 	 * Control the formatter for CSS (and its super languages) files.
 	 */
@@ -268,12 +272,13 @@ export interface CssFormatter {
 /**
  * Options that changes how the CSS parser behaves
  */
-export interface CssParser {
+export interface PartialCssParser {
 	/**
 	 * Allow comments to appear on incorrect lines in `.css` files
 	 */
 	allowWrongLineComments?: boolean;
 }
+export type AttributePosition = "auto" | "multiline";
 export type PlainIndentStyle = "tab" | "space";
 export type LineEnding = "lf" | "crlf" | "cr";
 /**
@@ -285,11 +290,15 @@ export type LineWidth = number;
 /**
  * Formatting options specific to the JavaScript files
  */
-export interface JavascriptFormatter {
+export interface PartialJavascriptFormatter {
 	/**
 	 * Whether to add non-necessary parentheses to arrow functions. Defaults to "always".
 	 */
 	arrowParentheses?: ArrowParentheses;
+	/**
+	 * The attribute position style in JavaScript code. Defaults to auto.
+	 */
+	attributePosition?: AttributePosition;
 	/**
 	 * Whether to hug the closing bracket of multiline HTML/JSX tags to the end of the last line, rather than being alone on the following line. Defaults to false.
 	 */
@@ -343,11 +352,11 @@ export interface JavascriptFormatter {
 	 */
 	trailingComma?: TrailingComma;
 }
-export interface JavascriptOrganizeImports {}
+export interface PartialJavascriptOrganizeImports {}
 /**
  * Options that changes how the JavaScript parser behaves
  */
-export interface JavascriptParser {
+export interface PartialJavascriptParser {
 	/**
 	* It enables the experimental and unsafe parsing of parameter decorators
 
@@ -355,7 +364,7 @@ These decorators belong to an old proposal, and they are subject to change.
 	 */
 	unsafeParameterDecoratorsEnabled?: boolean;
 }
-export interface JsonFormatter {
+export interface PartialJsonFormatter {
 	/**
 	 * Control the formatter for JSON (and its super languages) files.
 	 */
@@ -384,7 +393,7 @@ export interface JsonFormatter {
 /**
  * Options that changes how the JSON parser behaves
  */
-export interface JsonParser {
+export interface PartialJsonParser {
 	/**
 	 * Allow parsing comments in `.json` files
 	 */
@@ -416,7 +425,7 @@ export interface OverridePattern {
 	/**
 	 * Specific configuration for the Css language
 	 */
-	css?: CssConfiguration;
+	css?: PartialCssConfiguration;
 	/**
 	 * Specific configuration for the Json language
 	 */
@@ -432,11 +441,11 @@ export interface OverridePattern {
 	/**
 	 * Specific configuration for the JavaScript language
 	 */
-	javascript?: JavascriptConfiguration;
+	javascript?: PartialJavascriptConfiguration;
 	/**
 	 * Specific configuration for the Json language
 	 */
-	json?: JsonConfiguration;
+	json?: PartialJsonConfiguration;
 	/**
 	 * Specific configuration for the Json language
 	 */
@@ -466,59 +475,59 @@ export interface A11y {
 	/**
 	 * Enforce that the accessKey attribute is not used on any HTML element.
 	 */
-	noAccessKey?: RuleConfiguration;
+	noAccessKey?: RuleConfiguration_for_Null;
 	/**
 	 * Enforce that aria-hidden="true" is not set on focusable elements.
 	 */
-	noAriaHiddenOnFocusable?: RuleConfiguration;
+	noAriaHiddenOnFocusable?: RuleConfiguration_for_Null;
 	/**
 	 * Enforce that elements that do not support ARIA roles, states, and properties do not have those attributes.
 	 */
-	noAriaUnsupportedElements?: RuleConfiguration;
+	noAriaUnsupportedElements?: RuleConfiguration_for_Null;
 	/**
 	 * Enforce that autoFocus prop is not used on elements.
 	 */
-	noAutofocus?: RuleConfiguration;
+	noAutofocus?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow target="_blank" attribute without rel="noreferrer"
 	 */
-	noBlankTarget?: RuleConfiguration;
+	noBlankTarget?: RuleConfiguration_for_Null;
 	/**
 	 * Enforces that no distracting elements are used.
 	 */
-	noDistractingElements?: RuleConfiguration;
+	noDistractingElements?: RuleConfiguration_for_Null;
 	/**
 	 * The scope prop should be used only on <th> elements.
 	 */
-	noHeaderScope?: RuleConfiguration;
+	noHeaderScope?: RuleConfiguration_for_Null;
 	/**
 	 * Enforce that non-interactive ARIA roles are not assigned to interactive HTML elements.
 	 */
-	noInteractiveElementToNoninteractiveRole?: RuleConfiguration;
+	noInteractiveElementToNoninteractiveRole?: RuleConfiguration_for_Null;
 	/**
 	 * Enforce that interactive ARIA roles are not assigned to non-interactive HTML elements.
 	 */
-	noNoninteractiveElementToInteractiveRole?: RuleConfiguration;
+	noNoninteractiveElementToInteractiveRole?: RuleConfiguration_for_Null;
 	/**
 	 * Enforce that tabIndex is not assigned to non-interactive HTML elements.
 	 */
-	noNoninteractiveTabindex?: RuleConfiguration;
+	noNoninteractiveTabindex?: RuleConfiguration_for_Null;
 	/**
 	 * Prevent the usage of positive integers on tabIndex property
 	 */
-	noPositiveTabindex?: RuleConfiguration;
+	noPositiveTabindex?: RuleConfiguration_for_Null;
 	/**
 	 * Enforce img alt prop does not contain the word "image", "picture", or "photo".
 	 */
-	noRedundantAlt?: RuleConfiguration;
+	noRedundantAlt?: RuleConfiguration_for_Null;
 	/**
 	 * Enforce explicit role property is not the same as implicit/default role property on an element.
 	 */
-	noRedundantRoles?: RuleConfiguration;
+	noRedundantRoles?: RuleConfiguration_for_Null;
 	/**
 	 * Enforces the usage of the title element for the svg element.
 	 */
-	noSvgWithoutTitle?: RuleConfiguration;
+	noSvgWithoutTitle?: RuleConfiguration_for_Null;
 	/**
 	 * It enables the recommended rules for this group
 	 */
@@ -526,67 +535,67 @@ export interface A11y {
 	/**
 	 * Enforce that all elements that require alternative text have meaningful information to relay back to the end user.
 	 */
-	useAltText?: RuleConfiguration;
+	useAltText?: RuleConfiguration_for_Null;
 	/**
 	 * Enforce that anchors have content and that the content is accessible to screen readers.
 	 */
-	useAnchorContent?: RuleConfiguration;
+	useAnchorContent?: RuleConfiguration_for_Null;
 	/**
 	 * Enforce that tabIndex is assigned to non-interactive HTML elements with aria-activedescendant.
 	 */
-	useAriaActivedescendantWithTabindex?: RuleConfiguration;
+	useAriaActivedescendantWithTabindex?: RuleConfiguration_for_Null;
 	/**
 	 * Enforce that elements with ARIA roles must have all required ARIA attributes for that role.
 	 */
-	useAriaPropsForRole?: RuleConfiguration;
+	useAriaPropsForRole?: RuleConfiguration_for_Null;
 	/**
 	 * Enforces the usage of the attribute type for the element button
 	 */
-	useButtonType?: RuleConfiguration;
+	useButtonType?: RuleConfiguration_for_Null;
 	/**
 	 * Enforce that heading elements (h1, h2, etc.) have content and that the content is accessible to screen readers. Accessible means that it is not hidden using the aria-hidden prop.
 	 */
-	useHeadingContent?: RuleConfiguration;
+	useHeadingContent?: RuleConfiguration_for_Null;
 	/**
 	 * Enforce that html element has lang attribute.
 	 */
-	useHtmlLang?: RuleConfiguration;
+	useHtmlLang?: RuleConfiguration_for_Null;
 	/**
 	 * Enforces the usage of the attribute title for the element iframe.
 	 */
-	useIframeTitle?: RuleConfiguration;
+	useIframeTitle?: RuleConfiguration_for_Null;
 	/**
 	 * Enforce onClick is accompanied by at least one of the following: onKeyUp, onKeyDown, onKeyPress.
 	 */
-	useKeyWithClickEvents?: RuleConfiguration;
+	useKeyWithClickEvents?: RuleConfiguration_for_Null;
 	/**
 	 * Enforce onMouseOver / onMouseOut are accompanied by onFocus / onBlur.
 	 */
-	useKeyWithMouseEvents?: RuleConfiguration;
+	useKeyWithMouseEvents?: RuleConfiguration_for_Null;
 	/**
 	 * Enforces that audio and video elements must have a track for captions.
 	 */
-	useMediaCaption?: RuleConfiguration;
+	useMediaCaption?: RuleConfiguration_for_Null;
 	/**
 	 * Enforce that all anchors are valid, and they are navigable elements.
 	 */
-	useValidAnchor?: RuleConfiguration;
+	useValidAnchor?: RuleConfiguration_for_Null;
 	/**
 	 * Ensures that ARIA properties aria-* are all valid.
 	 */
-	useValidAriaProps?: RuleConfiguration;
+	useValidAriaProps?: RuleConfiguration_for_Null;
 	/**
 	 * Elements with ARIA roles must use a valid, non-abstract ARIA role.
 	 */
-	useValidAriaRole?: RuleConfiguration;
+	useValidAriaRole?: RuleConfiguration_for_ValidAriaRoleOptions;
 	/**
 	 * Enforce that ARIA state and property values are valid.
 	 */
-	useValidAriaValues?: RuleConfiguration;
+	useValidAriaValues?: RuleConfiguration_for_Null;
 	/**
 	 * Ensure that the attribute passed to the lang attribute is a correct ISO language and/or country.
 	 */
-	useValidLang?: RuleConfiguration;
+	useValidLang?: RuleConfiguration_for_Null;
 }
 /**
  * A list of rules that belong to this group
@@ -599,75 +608,75 @@ export interface Complexity {
 	/**
 	 * Disallow primitive type aliases and misleading types.
 	 */
-	noBannedTypes?: RuleConfiguration;
+	noBannedTypes?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow functions that exceed a given Cognitive Complexity score.
 	 */
-	noExcessiveCognitiveComplexity?: RuleConfiguration;
+	noExcessiveCognitiveComplexity?: RuleConfiguration_for_ComplexityOptions;
 	/**
 	 * Disallow unnecessary boolean casts
 	 */
-	noExtraBooleanCast?: RuleConfiguration;
+	noExtraBooleanCast?: RuleConfiguration_for_Null;
 	/**
 	 * Prefer for...of statement instead of Array.forEach.
 	 */
-	noForEach?: RuleConfiguration;
+	noForEach?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow unclear usage of consecutive space characters in regular expression literals
 	 */
-	noMultipleSpacesInRegularExpressionLiterals?: RuleConfiguration;
+	noMultipleSpacesInRegularExpressionLiterals?: RuleConfiguration_for_Null;
 	/**
 	 * This rule reports when a class has no non-static members, such as for a class used exclusively as a static namespace.
 	 */
-	noStaticOnlyClass?: RuleConfiguration;
+	noStaticOnlyClass?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow this and super in static contexts.
 	 */
-	noThisInStatic?: RuleConfiguration;
+	noThisInStatic?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow unnecessary catch clauses.
 	 */
-	noUselessCatch?: RuleConfiguration;
+	noUselessCatch?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow unnecessary constructors.
 	 */
-	noUselessConstructor?: RuleConfiguration;
+	noUselessConstructor?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow empty exports that don't change anything in a module file.
 	 */
-	noUselessEmptyExport?: RuleConfiguration;
+	noUselessEmptyExport?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow unnecessary fragments
 	 */
-	noUselessFragments?: RuleConfiguration;
+	noUselessFragments?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow unnecessary labels.
 	 */
-	noUselessLabel?: RuleConfiguration;
+	noUselessLabel?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow renaming import, export, and destructured assignments to the same name.
 	 */
-	noUselessRename?: RuleConfiguration;
+	noUselessRename?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow useless case in switch statements.
 	 */
-	noUselessSwitchCase?: RuleConfiguration;
+	noUselessSwitchCase?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow useless this aliasing.
 	 */
-	noUselessThisAlias?: RuleConfiguration;
+	noUselessThisAlias?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow using any or unknown as type constraint.
 	 */
-	noUselessTypeConstraint?: RuleConfiguration;
+	noUselessTypeConstraint?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow the use of void operators, which is not a familiar operator.
 	 */
-	noVoid?: RuleConfiguration;
+	noVoid?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow with statements in non-strict contexts.
 	 */
-	noWith?: RuleConfiguration;
+	noWith?: RuleConfiguration_for_Null;
 	/**
 	 * It enables the recommended rules for this group
 	 */
@@ -675,31 +684,31 @@ export interface Complexity {
 	/**
 	 * Use arrow functions over function expressions.
 	 */
-	useArrowFunction?: RuleConfiguration;
+	useArrowFunction?: RuleConfiguration_for_Null;
 	/**
 	 * Promotes the use of .flatMap() when map().flat() are used together.
 	 */
-	useFlatMap?: RuleConfiguration;
+	useFlatMap?: RuleConfiguration_for_Null;
 	/**
 	 * Enforce the usage of a literal access to properties over computed property access.
 	 */
-	useLiteralKeys?: RuleConfiguration;
+	useLiteralKeys?: RuleConfiguration_for_Null;
 	/**
 	 * Enforce using concise optional chain instead of chained logical expressions.
 	 */
-	useOptionalChain?: RuleConfiguration;
+	useOptionalChain?: RuleConfiguration_for_Null;
 	/**
 	 * Enforce the use of the regular expression literals instead of the RegExp constructor if possible.
 	 */
-	useRegexLiterals?: RuleConfiguration;
+	useRegexLiterals?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow number literal object member names which are not base10 or uses underscore as separator
 	 */
-	useSimpleNumberKeys?: RuleConfiguration;
+	useSimpleNumberKeys?: RuleConfiguration_for_Null;
 	/**
 	 * Discard redundant terms from logical expressions.
 	 */
-	useSimplifiedLogicExpression?: RuleConfiguration;
+	useSimplifiedLogicExpression?: RuleConfiguration_for_Null;
 }
 /**
  * A list of rules that belong to this group
@@ -712,115 +721,115 @@ export interface Correctness {
 	/**
 	 * Prevent passing of children as props.
 	 */
-	noChildrenProp?: RuleConfiguration;
+	noChildrenProp?: RuleConfiguration_for_Null;
 	/**
 	 * Prevents from having const variables being re-assigned.
 	 */
-	noConstAssign?: RuleConfiguration;
+	noConstAssign?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow constant expressions in conditions
 	 */
-	noConstantCondition?: RuleConfiguration;
+	noConstantCondition?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow returning a value from a constructor.
 	 */
-	noConstructorReturn?: RuleConfiguration;
+	noConstructorReturn?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow empty character classes in regular expression literals.
 	 */
-	noEmptyCharacterClassInRegex?: RuleConfiguration;
+	noEmptyCharacterClassInRegex?: RuleConfiguration_for_Null;
 	/**
 	 * Disallows empty destructuring patterns.
 	 */
-	noEmptyPattern?: RuleConfiguration;
+	noEmptyPattern?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow calling global object properties as functions
 	 */
-	noGlobalObjectCalls?: RuleConfiguration;
+	noGlobalObjectCalls?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow function and var declarations that are accessible outside their block.
 	 */
-	noInnerDeclarations?: RuleConfiguration;
+	noInnerDeclarations?: RuleConfiguration_for_Null;
 	/**
 	 * Prevents the incorrect use of super() inside classes. It also checks whether a call super() is missing from classes that extends other constructors.
 	 */
-	noInvalidConstructorSuper?: RuleConfiguration;
+	noInvalidConstructorSuper?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow new operators with global non-constructor functions.
 	 */
-	noInvalidNewBuiltin?: RuleConfiguration;
+	noInvalidNewBuiltin?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow new operators with the Symbol object.
 	 */
-	noNewSymbol?: RuleConfiguration;
+	noNewSymbol?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow \8 and \9 escape sequences in string literals.
 	 */
-	noNonoctalDecimalEscape?: RuleConfiguration;
+	noNonoctalDecimalEscape?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow literal numbers that lose precision
 	 */
-	noPrecisionLoss?: RuleConfiguration;
+	noPrecisionLoss?: RuleConfiguration_for_Null;
 	/**
 	 * Prevent the usage of the return value of React.render.
 	 */
-	noRenderReturnValue?: RuleConfiguration;
+	noRenderReturnValue?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow assignments where both sides are exactly the same.
 	 */
-	noSelfAssign?: RuleConfiguration;
+	noSelfAssign?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow returning a value from a setter
 	 */
-	noSetterReturn?: RuleConfiguration;
+	noSetterReturn?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow comparison of expressions modifying the string case with non-compliant value.
 	 */
-	noStringCaseMismatch?: RuleConfiguration;
+	noStringCaseMismatch?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow lexical declarations in switch clauses.
 	 */
-	noSwitchDeclarations?: RuleConfiguration;
+	noSwitchDeclarations?: RuleConfiguration_for_Null;
 	/**
 	 * Prevents the usage of variables that haven't been declared inside the document.
 	 */
-	noUndeclaredVariables?: RuleConfiguration;
+	noUndeclaredVariables?: RuleConfiguration_for_Null;
 	/**
 	 * Avoid using unnecessary continue.
 	 */
-	noUnnecessaryContinue?: RuleConfiguration;
+	noUnnecessaryContinue?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow unreachable code
 	 */
-	noUnreachable?: RuleConfiguration;
+	noUnreachable?: RuleConfiguration_for_Null;
 	/**
 	 * Ensures the super() constructor is called exactly once on every code  path in a class constructor before this is accessed if the class has a superclass
 	 */
-	noUnreachableSuper?: RuleConfiguration;
+	noUnreachableSuper?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow control flow statements in finally blocks.
 	 */
-	noUnsafeFinally?: RuleConfiguration;
+	noUnsafeFinally?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow the use of optional chaining in contexts where the undefined value is not allowed.
 	 */
-	noUnsafeOptionalChaining?: RuleConfiguration;
+	noUnsafeOptionalChaining?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow unused labels.
 	 */
-	noUnusedLabels?: RuleConfiguration;
+	noUnusedLabels?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow unused variables.
 	 */
-	noUnusedVariables?: RuleConfiguration;
+	noUnusedVariables?: RuleConfiguration_for_Null;
 	/**
 	 * This rules prevents void elements (AKA self-closing elements) from having children.
 	 */
-	noVoidElementsWithChildren?: RuleConfiguration;
+	noVoidElementsWithChildren?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow returning a value from a function with the return type 'void'
 	 */
-	noVoidTypeReturn?: RuleConfiguration;
+	noVoidTypeReturn?: RuleConfiguration_for_Null;
 	/**
 	 * It enables the recommended rules for this group
 	 */
@@ -828,23 +837,23 @@ export interface Correctness {
 	/**
 	 * Enforce all dependencies are correctly specified in a React hook.
 	 */
-	useExhaustiveDependencies?: RuleConfiguration;
+	useExhaustiveDependencies?: RuleConfiguration_for_HooksOptions;
 	/**
 	 * Enforce that all React hooks are being called from the Top Level component functions.
 	 */
-	useHookAtTopLevel?: RuleConfiguration;
+	useHookAtTopLevel?: RuleConfiguration_for_DeprecatedHooksOptions;
 	/**
 	 * Require calls to isNaN() when checking for NaN.
 	 */
-	useIsNan?: RuleConfiguration;
+	useIsNan?: RuleConfiguration_for_Null;
 	/**
 	 * Enforce "for" loop update clause moving the counter in the right direction.
 	 */
-	useValidForDirection?: RuleConfiguration;
+	useValidForDirection?: RuleConfiguration_for_Null;
 	/**
 	 * Require generator functions to contain yield.
 	 */
-	useYield?: RuleConfiguration;
+	useYield?: RuleConfiguration_for_Null;
 }
 /**
  * A list of rules that belong to this group
@@ -855,65 +864,101 @@ export interface Nursery {
 	 */
 	all?: boolean;
 	/**
+	 * Disallow the use of console.
+	 */
+	noConsole?: RuleConfiguration_for_Null;
+	/**
 	 * Disallow two keys with the same name inside a JSON object.
 	 */
-	noDuplicateJsonKeys?: RuleConfiguration;
+	noDuplicateJsonKeys?: RuleConfiguration_for_Null;
+	/**
+	 * A describe block should not contain duplicate hooks.
+	 */
+	noDuplicateTestHooks?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow empty block statements and static blocks.
 	 */
-	noEmptyBlockStatements?: RuleConfiguration;
+	noEmptyBlockStatements?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow empty type parameters in type aliases and interfaces.
 	 */
-	noEmptyTypeParameters?: RuleConfiguration;
+	noEmptyTypeParameters?: RuleConfiguration_for_Null;
+	/**
+	 * This rule enforces a maximum depth to nested describe() in test files.
+	 */
+	noExcessiveNestedTestSuites?: RuleConfiguration_for_Null;
+	/**
+	 * Disallow using export or module.exports in files containing tests
+	 */
+	noExportsInTest?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow focused tests.
 	 */
-	noFocusedTests?: RuleConfiguration;
+	noFocusedTests?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow assignments to native objects and read-only global variables.
 	 */
-	noGlobalAssign?: RuleConfiguration;
+	noGlobalAssign?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow the use of global eval().
 	 */
-	noGlobalEval?: RuleConfiguration;
+	noGlobalEval?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow the use of variables and function parameters before their declaration
 	 */
-	noInvalidUseBeforeDeclaration?: RuleConfiguration;
+	noInvalidUseBeforeDeclaration?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow characters made with multiple code points in character class syntax.
 	 */
-	noMisleadingCharacterClass?: RuleConfiguration;
+	noMisleadingCharacterClass?: RuleConfiguration_for_Null;
+	/**
+	 * Disallow the use of namespace imports.
+	 */
+	noNamespaceImport?: RuleConfiguration_for_Null;
 	/**
 	 * Forbid the use of Node.js builtin modules.
 	 */
-	noNodejsModules?: RuleConfiguration;
+	noNodejsModules?: RuleConfiguration_for_Null;
+	/**
+	 * Avoid re-export all.
+	 */
+	noReExportAll?: RuleConfiguration_for_Null;
+	/**
+	 * Disallow specified modules when loaded by import or require.
+	 */
+	noRestrictedImports?: RuleConfiguration_for_RestrictedImportsOptions;
+	/**
+	 * It detects possible "wrong" semicolons inside JSX elements.
+	 */
+	noSemicolonInJsx?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow disabled tests.
 	 */
-	noSkippedTests?: RuleConfiguration;
+	noSkippedTests?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow then property.
 	 */
-	noThenProperty?: RuleConfiguration;
+	noThenProperty?: RuleConfiguration_for_Null;
+	/**
+	 * Disallow the use of dependencies that aren't specified in the package.json.
+	 */
+	noUndeclaredDependencies?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow unused imports.
 	 */
-	noUnusedImports?: RuleConfiguration;
+	noUnusedImports?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow unused private class members
 	 */
-	noUnusedPrivateClassMembers?: RuleConfiguration;
+	noUnusedPrivateClassMembers?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow unnecessary nested block statements.
 	 */
-	noUselessLoneBlockStatements?: RuleConfiguration;
+	noUselessLoneBlockStatements?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow ternary operators when simpler alternatives exist.
 	 */
-	noUselessTernary?: RuleConfiguration;
+	noUselessTernary?: RuleConfiguration_for_Null;
 	/**
 	 * It enables the recommended rules for this group
 	 */
@@ -921,51 +966,59 @@ export interface Nursery {
 	/**
 	 * Ensure async functions utilize await.
 	 */
-	useAwait?: RuleConfiguration;
+	useAwait?: RuleConfiguration_for_Null;
 	/**
 	 * Require consistently using either T[] or Array<T>
 	 */
-	useConsistentArrayType?: RuleConfiguration;
+	useConsistentArrayType?: RuleConfiguration_for_ConsistentArrayTypeOptions;
 	/**
 	 * Promotes the use of export type for types.
 	 */
-	useExportType?: RuleConfiguration;
+	useExportType?: RuleConfiguration_for_Null;
 	/**
 	 * Enforce naming conventions for JavaScript and TypeScript filenames.
 	 */
-	useFilenamingConvention?: RuleConfiguration;
+	useFilenamingConvention?: RuleConfiguration_for_FilenamingConventionOptions;
 	/**
 	 * This rule recommends a for-of loop when in a for loop, the index used to extract an item from the iterated array.
 	 */
-	useForOf?: RuleConfiguration;
+	useForOf?: RuleConfiguration_for_Null;
 	/**
 	 * Enforce the use of import type when an import only has specifiers with type qualifier.
 	 */
-	useGroupedTypeImport?: RuleConfiguration;
+	useGroupedTypeImport?: RuleConfiguration_for_Null;
 	/**
 	 * Disallows package private imports.
 	 */
-	useImportRestrictions?: RuleConfiguration;
+	useImportRestrictions?: RuleConfiguration_for_Null;
 	/**
 	 * Promotes the use of import type for types.
 	 */
-	useImportType?: RuleConfiguration;
+	useImportType?: RuleConfiguration_for_Null;
+	/**
+	 * Disallow missing key props in iterators/collection literals.
+	 */
+	useJsxKeyInIterable?: RuleConfiguration_for_Null;
+	/**
+	 * Promotes the usage of node:assert/strict over node:assert.
+	 */
+	useNodeAssertStrict?: RuleConfiguration_for_Null;
 	/**
 	 * Enforces using the node: protocol for Node.js builtin modules.
 	 */
-	useNodejsImportProtocol?: RuleConfiguration;
+	useNodejsImportProtocol?: RuleConfiguration_for_Null;
 	/**
 	 * Use the Number properties instead of global ones.
 	 */
-	useNumberNamespace?: RuleConfiguration;
+	useNumberNamespace?: RuleConfiguration_for_Null;
 	/**
 	 * Enforce using function types instead of object type with call signatures.
 	 */
-	useShorthandFunctionType?: RuleConfiguration;
+	useShorthandFunctionType?: RuleConfiguration_for_Null;
 	/**
 	 * Enforce the sorting of CSS utility classes.
 	 */
-	useSortedClasses?: RuleConfiguration;
+	useSortedClasses?: RuleConfiguration_for_UtilityClassSortingOptions;
 }
 /**
  * A list of rules that belong to this group
@@ -978,11 +1031,11 @@ export interface Performance {
 	/**
 	 * Disallow the use of spread (...) syntax on accumulators.
 	 */
-	noAccumulatingSpread?: RuleConfiguration;
+	noAccumulatingSpread?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow the use of the delete operator.
 	 */
-	noDelete?: RuleConfiguration;
+	noDelete?: RuleConfiguration_for_Null;
 	/**
 	 * It enables the recommended rules for this group
 	 */
@@ -999,11 +1052,11 @@ export interface Security {
 	/**
 	 * Prevent the usage of dangerous JSX props
 	 */
-	noDangerouslySetInnerHtml?: RuleConfiguration;
+	noDangerouslySetInnerHtml?: RuleConfiguration_for_Null;
 	/**
 	 * Report when a DOM element or a component uses both children and dangerouslySetInnerHTML prop.
 	 */
-	noDangerouslySetInnerHtmlWithChildren?: RuleConfiguration;
+	noDangerouslySetInnerHtmlWithChildren?: RuleConfiguration_for_Null;
 	/**
 	 * It enables the recommended rules for this group
 	 */
@@ -1020,63 +1073,63 @@ export interface Style {
 	/**
 	 * Disallow the use of arguments.
 	 */
-	noArguments?: RuleConfiguration;
+	noArguments?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow comma operator.
 	 */
-	noCommaOperator?: RuleConfiguration;
+	noCommaOperator?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow default exports.
 	 */
-	noDefaultExport?: RuleConfiguration;
+	noDefaultExport?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow implicit true values on JSX boolean attributes
 	 */
-	noImplicitBoolean?: RuleConfiguration;
+	noImplicitBoolean?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow type annotations for variables, parameters, and class properties initialized with a literal expression.
 	 */
-	noInferrableTypes?: RuleConfiguration;
+	noInferrableTypes?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow the use of TypeScript's namespaces.
 	 */
-	noNamespace?: RuleConfiguration;
+	noNamespace?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow negation in the condition of an if statement if it has an else clause.
 	 */
-	noNegationElse?: RuleConfiguration;
+	noNegationElse?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow non-null assertions using the ! postfix operator.
 	 */
-	noNonNullAssertion?: RuleConfiguration;
+	noNonNullAssertion?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow reassigning function parameters.
 	 */
-	noParameterAssign?: RuleConfiguration;
+	noParameterAssign?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow the use of parameter properties in class constructors.
 	 */
-	noParameterProperties?: RuleConfiguration;
+	noParameterProperties?: RuleConfiguration_for_Null;
 	/**
 	 * This rule allows you to specify global variable names that you don’t want to use in your application.
 	 */
-	noRestrictedGlobals?: RuleConfiguration;
+	noRestrictedGlobals?: RuleConfiguration_for_RestrictedGlobalsOptions;
 	/**
 	 * Disallow the use of constants which its value is the upper-case version of its name.
 	 */
-	noShoutyConstants?: RuleConfiguration;
+	noShoutyConstants?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow template literals if interpolation and special-character handling are not needed
 	 */
-	noUnusedTemplateLiteral?: RuleConfiguration;
+	noUnusedTemplateLiteral?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow else block when the if block breaks early.
 	 */
-	noUselessElse?: RuleConfiguration;
+	noUselessElse?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow the use of var
 	 */
-	noVar?: RuleConfiguration;
+	noVar?: RuleConfiguration_for_Null;
 	/**
 	 * It enables the recommended rules for this group
 	 */
@@ -1084,75 +1137,75 @@ export interface Style {
 	/**
 	 * Enforce the use of as const over literal type and type annotation.
 	 */
-	useAsConstAssertion?: RuleConfiguration;
+	useAsConstAssertion?: RuleConfiguration_for_Null;
 	/**
 	 * Requires following curly brace conventions.
 	 */
-	useBlockStatements?: RuleConfiguration;
+	useBlockStatements?: RuleConfiguration_for_Null;
 	/**
 	 * Enforce using else if instead of nested if in else clauses.
 	 */
-	useCollapsedElseIf?: RuleConfiguration;
+	useCollapsedElseIf?: RuleConfiguration_for_Null;
 	/**
 	 * Require const declarations for variables that are never reassigned after declared.
 	 */
-	useConst?: RuleConfiguration;
+	useConst?: RuleConfiguration_for_Null;
 	/**
 	 * Enforce default function parameters and optional function parameters to be last.
 	 */
-	useDefaultParameterLast?: RuleConfiguration;
+	useDefaultParameterLast?: RuleConfiguration_for_Null;
 	/**
 	 * Require that each enum member value be explicitly initialized.
 	 */
-	useEnumInitializers?: RuleConfiguration;
+	useEnumInitializers?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow the use of Math.pow in favor of the ** operator.
 	 */
-	useExponentiationOperator?: RuleConfiguration;
+	useExponentiationOperator?: RuleConfiguration_for_Null;
 	/**
 	 * This rule enforces the use of <>...</> over <Fragment>...</Fragment>.
 	 */
-	useFragmentSyntax?: RuleConfiguration;
+	useFragmentSyntax?: RuleConfiguration_for_Null;
 	/**
 	 * Require all enum members to be literal values.
 	 */
-	useLiteralEnumMembers?: RuleConfiguration;
+	useLiteralEnumMembers?: RuleConfiguration_for_Null;
 	/**
 	 * Enforce naming conventions for everything across a codebase.
 	 */
-	useNamingConvention?: RuleConfiguration;
+	useNamingConvention?: RuleConfiguration_for_NamingConventionOptions;
 	/**
 	 * Disallow parseInt() and Number.parseInt() in favor of binary, octal, and hexadecimal literals
 	 */
-	useNumericLiterals?: RuleConfiguration;
+	useNumericLiterals?: RuleConfiguration_for_Null;
 	/**
 	 * Prevent extra closing tags for components without children
 	 */
-	useSelfClosingElements?: RuleConfiguration;
+	useSelfClosingElements?: RuleConfiguration_for_Null;
 	/**
 	 * When expressing array types, this rule promotes the usage of T[] shorthand instead of Array<T>.
 	 */
-	useShorthandArrayType?: RuleConfiguration;
+	useShorthandArrayType?: RuleConfiguration_for_Null;
 	/**
 	 * Require assignment operator shorthand where possible.
 	 */
-	useShorthandAssign?: RuleConfiguration;
+	useShorthandAssign?: RuleConfiguration_for_Null;
 	/**
 	 * Enforces switch clauses have a single statement, emits a quick fix wrapping the statements in a block.
 	 */
-	useSingleCaseStatement?: RuleConfiguration;
+	useSingleCaseStatement?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow multiple variable declarations in the same variable statement
 	 */
-	useSingleVarDeclarator?: RuleConfiguration;
+	useSingleVarDeclarator?: RuleConfiguration_for_Null;
 	/**
 	 * Prefer template literals over string concatenation.
 	 */
-	useTemplate?: RuleConfiguration;
+	useTemplate?: RuleConfiguration_for_Null;
 	/**
 	 * Enforce the use of while loops instead of for loops when the initializer and update expressions are not needed.
 	 */
-	useWhile?: RuleConfiguration;
+	useWhile?: RuleConfiguration_for_Null;
 }
 /**
  * A list of rules that belong to this group
@@ -1163,165 +1216,165 @@ export interface Suspicious {
 	 */
 	all?: boolean;
 	/**
-	 * Usually, the definition in the standard library is more precise than what people come up with or the used constant exceeds the maximum precision of the number type.
+	 * Use standard constants instead of approximated literals.
 	 */
-	noApproximativeNumericConstant?: RuleConfiguration;
+	noApproximativeNumericConstant?: RuleConfiguration_for_Null;
 	/**
 	 * Discourage the usage of Array index in keys.
 	 */
-	noArrayIndexKey?: RuleConfiguration;
+	noArrayIndexKey?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow assignments in expressions.
 	 */
-	noAssignInExpressions?: RuleConfiguration;
+	noAssignInExpressions?: RuleConfiguration_for_Null;
 	/**
 	 * Disallows using an async function as a Promise executor.
 	 */
-	noAsyncPromiseExecutor?: RuleConfiguration;
+	noAsyncPromiseExecutor?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow reassigning exceptions in catch clauses.
 	 */
-	noCatchAssign?: RuleConfiguration;
+	noCatchAssign?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow reassigning class members.
 	 */
-	noClassAssign?: RuleConfiguration;
+	noClassAssign?: RuleConfiguration_for_Null;
 	/**
 	 * Prevent comments from being inserted as text nodes
 	 */
-	noCommentText?: RuleConfiguration;
+	noCommentText?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow comparing against -0
 	 */
-	noCompareNegZero?: RuleConfiguration;
+	noCompareNegZero?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow labeled statements that are not loops.
 	 */
-	noConfusingLabels?: RuleConfiguration;
+	noConfusingLabels?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow void type outside of generic or return types.
 	 */
-	noConfusingVoidType?: RuleConfiguration;
+	noConfusingVoidType?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow the use of console.log
 	 */
-	noConsoleLog?: RuleConfiguration;
+	noConsoleLog?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow TypeScript const enum
 	 */
-	noConstEnum?: RuleConfiguration;
+	noConstEnum?: RuleConfiguration_for_Null;
 	/**
 	 * Prevents from having control characters and some escape sequences that match control characters in regular expressions.
 	 */
-	noControlCharactersInRegex?: RuleConfiguration;
+	noControlCharactersInRegex?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow the use of debugger
 	 */
-	noDebugger?: RuleConfiguration;
+	noDebugger?: RuleConfiguration_for_Null;
 	/**
 	 * Require the use of === and !==
 	 */
-	noDoubleEquals?: RuleConfiguration;
+	noDoubleEquals?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow duplicate case labels.
 	 */
-	noDuplicateCase?: RuleConfiguration;
+	noDuplicateCase?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow duplicate class members.
 	 */
-	noDuplicateClassMembers?: RuleConfiguration;
+	noDuplicateClassMembers?: RuleConfiguration_for_Null;
 	/**
 	 * Prevents JSX properties to be assigned multiple times.
 	 */
-	noDuplicateJsxProps?: RuleConfiguration;
+	noDuplicateJsxProps?: RuleConfiguration_for_Null;
 	/**
 	 * Prevents object literals having more than one property declaration for the same name.
 	 */
-	noDuplicateObjectKeys?: RuleConfiguration;
+	noDuplicateObjectKeys?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow duplicate function parameter name.
 	 */
-	noDuplicateParameters?: RuleConfiguration;
+	noDuplicateParameters?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow the declaration of empty interfaces.
 	 */
-	noEmptyInterface?: RuleConfiguration;
+	noEmptyInterface?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow the any type usage.
 	 */
-	noExplicitAny?: RuleConfiguration;
+	noExplicitAny?: RuleConfiguration_for_Null;
 	/**
 	 * Prevents the wrong usage of the non-null assertion operator (!) in TypeScript files.
 	 */
-	noExtraNonNullAssertion?: RuleConfiguration;
+	noExtraNonNullAssertion?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow fallthrough of switch clauses.
 	 */
-	noFallthroughSwitchClause?: RuleConfiguration;
+	noFallthroughSwitchClause?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow reassigning function declarations.
 	 */
-	noFunctionAssign?: RuleConfiguration;
+	noFunctionAssign?: RuleConfiguration_for_Null;
 	/**
 	 * Use Number.isFinite instead of global isFinite.
 	 */
-	noGlobalIsFinite?: RuleConfiguration;
+	noGlobalIsFinite?: RuleConfiguration_for_Null;
 	/**
 	 * Use Number.isNaN instead of global isNaN.
 	 */
-	noGlobalIsNan?: RuleConfiguration;
+	noGlobalIsNan?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow use of implicit any type on variable declarations.
 	 */
-	noImplicitAnyLet?: RuleConfiguration;
+	noImplicitAnyLet?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow assigning to imported bindings
 	 */
-	noImportAssign?: RuleConfiguration;
+	noImportAssign?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow labels that share a name with a variable
 	 */
-	noLabelVar?: RuleConfiguration;
+	noLabelVar?: RuleConfiguration_for_Null;
 	/**
 	 * Enforce proper usage of new and constructor.
 	 */
-	noMisleadingInstantiator?: RuleConfiguration;
+	noMisleadingInstantiator?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow shorthand assign when variable appears on both sides.
 	 */
-	noMisrefactoredShorthandAssign?: RuleConfiguration;
+	noMisrefactoredShorthandAssign?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow direct use of Object.prototype builtins.
 	 */
-	noPrototypeBuiltins?: RuleConfiguration;
+	noPrototypeBuiltins?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow variable, function, class, and type redeclarations in the same scope.
 	 */
-	noRedeclare?: RuleConfiguration;
+	noRedeclare?: RuleConfiguration_for_Null;
 	/**
 	 * Prevents from having redundant "use strict".
 	 */
-	noRedundantUseStrict?: RuleConfiguration;
+	noRedundantUseStrict?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow comparisons where both sides are exactly the same.
 	 */
-	noSelfCompare?: RuleConfiguration;
+	noSelfCompare?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow identifiers from shadowing restricted names.
 	 */
-	noShadowRestrictedNames?: RuleConfiguration;
+	noShadowRestrictedNames?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow sparse arrays
 	 */
-	noSparseArray?: RuleConfiguration;
+	noSparseArray?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow unsafe declaration merging between interfaces and classes.
 	 */
-	noUnsafeDeclarationMerging?: RuleConfiguration;
+	noUnsafeDeclarationMerging?: RuleConfiguration_for_Null;
 	/**
 	 * Disallow using unsafe negation.
 	 */
-	noUnsafeNegation?: RuleConfiguration;
+	noUnsafeNegation?: RuleConfiguration_for_Null;
 	/**
 	 * It enables the recommended rules for this group
 	 */
@@ -1329,25 +1382,29 @@ export interface Suspicious {
 	/**
 	 * Enforce default clauses in switch statements to be last
 	 */
-	useDefaultSwitchClauseLast?: RuleConfiguration;
+	useDefaultSwitchClauseLast?: RuleConfiguration_for_Null;
 	/**
 	 * Enforce get methods to always return a value.
 	 */
-	useGetterReturn?: RuleConfiguration;
+	useGetterReturn?: RuleConfiguration_for_Null;
 	/**
 	 * Use Array.isArray() instead of instanceof Array.
 	 */
-	useIsArray?: RuleConfiguration;
+	useIsArray?: RuleConfiguration_for_Null;
 	/**
 	 * Require using the namespace keyword over the module keyword to declare TypeScript namespaces.
 	 */
-	useNamespaceKeyword?: RuleConfiguration;
+	useNamespaceKeyword?: RuleConfiguration_for_Null;
 	/**
 	 * This rule verifies the result of typeof $expr unary expressions is being compared to valid values, either string literals containing valid type names or other typeof expressions
 	 */
-	useValidTypeof?: RuleConfiguration;
+	useValidTypeof?: RuleConfiguration_for_Null;
 }
 export interface OverrideFormatterConfiguration {
+	/**
+	 * The attribute position style.
+	 */
+	attributePosition?: AttributePosition;
 	enabled?: boolean;
 	/**
 	 * Stores whether formatting should be allowed to proceed if a given file has syntax errors
@@ -1390,22 +1447,88 @@ export interface OverrideOrganizeImportsConfiguration {
 	 */
 	enabled?: boolean;
 }
-export type RuleConfiguration = RulePlainConfiguration | RuleWithOptions;
+export type RuleConfiguration_for_Null =
+	| RulePlainConfiguration
+	| RuleWithOptions_for_Null;
+export type RuleConfiguration_for_ValidAriaRoleOptions =
+	| RulePlainConfiguration
+	| RuleWithOptions_for_ValidAriaRoleOptions;
+export type RuleConfiguration_for_ComplexityOptions =
+	| RulePlainConfiguration
+	| RuleWithOptions_for_ComplexityOptions;
+export type RuleConfiguration_for_HooksOptions =
+	| RulePlainConfiguration
+	| RuleWithOptions_for_HooksOptions;
+export type RuleConfiguration_for_DeprecatedHooksOptions =
+	| RulePlainConfiguration
+	| RuleWithOptions_for_DeprecatedHooksOptions;
+export type RuleConfiguration_for_RestrictedImportsOptions =
+	| RulePlainConfiguration
+	| RuleWithOptions_for_RestrictedImportsOptions;
+export type RuleConfiguration_for_ConsistentArrayTypeOptions =
+	| RulePlainConfiguration
+	| RuleWithOptions_for_ConsistentArrayTypeOptions;
+export type RuleConfiguration_for_FilenamingConventionOptions =
+	| RulePlainConfiguration
+	| RuleWithOptions_for_FilenamingConventionOptions;
+export type RuleConfiguration_for_UtilityClassSortingOptions =
+	| RulePlainConfiguration
+	| RuleWithOptions_for_UtilityClassSortingOptions;
+export type RuleConfiguration_for_RestrictedGlobalsOptions =
+	| RulePlainConfiguration
+	| RuleWithOptions_for_RestrictedGlobalsOptions;
+export type RuleConfiguration_for_NamingConventionOptions =
+	| RulePlainConfiguration
+	| RuleWithOptions_for_NamingConventionOptions;
 export type RulePlainConfiguration = "warn" | "error" | "off";
-export interface RuleWithOptions {
+export interface RuleWithOptions_for_Null {
 	level: RulePlainConfiguration;
-	options?: PossibleOptions;
+	options: null;
 }
-export type PossibleOptions =
-	| ComplexityOptions
-	| ConsistentArrayTypeOptions
-	| FilenamingConventionOptions
-	| HooksOptions
-	| DeprecatedHooksOptions
-	| NamingConventionOptions
-	| RestrictedGlobalsOptions
-	| ValidAriaRoleOptions
-	| UtilityClassSortingOptions;
+export interface RuleWithOptions_for_ValidAriaRoleOptions {
+	level: RulePlainConfiguration;
+	options: ValidAriaRoleOptions;
+}
+export interface RuleWithOptions_for_ComplexityOptions {
+	level: RulePlainConfiguration;
+	options: ComplexityOptions;
+}
+export interface RuleWithOptions_for_HooksOptions {
+	level: RulePlainConfiguration;
+	options: HooksOptions;
+}
+export interface RuleWithOptions_for_DeprecatedHooksOptions {
+	level: RulePlainConfiguration;
+	options: DeprecatedHooksOptions;
+}
+export interface RuleWithOptions_for_RestrictedImportsOptions {
+	level: RulePlainConfiguration;
+	options: RestrictedImportsOptions;
+}
+export interface RuleWithOptions_for_ConsistentArrayTypeOptions {
+	level: RulePlainConfiguration;
+	options: ConsistentArrayTypeOptions;
+}
+export interface RuleWithOptions_for_FilenamingConventionOptions {
+	level: RulePlainConfiguration;
+	options: FilenamingConventionOptions;
+}
+export interface RuleWithOptions_for_UtilityClassSortingOptions {
+	level: RulePlainConfiguration;
+	options: UtilityClassSortingOptions;
+}
+export interface RuleWithOptions_for_RestrictedGlobalsOptions {
+	level: RulePlainConfiguration;
+	options: RestrictedGlobalsOptions;
+}
+export interface RuleWithOptions_for_NamingConventionOptions {
+	level: RulePlainConfiguration;
+	options: NamingConventionOptions;
+}
+export interface ValidAriaRoleOptions {
+	allowInvalidRoles: string[];
+	ignoreNonDom: boolean;
+}
 /**
  * Options for the rule `noExcessiveCognitiveComplexity`.
  */
@@ -1414,22 +1537,6 @@ export interface ComplexityOptions {
 	 * The maximum complexity score that we allow. Anything higher is considered excessive.
 	 */
 	maxAllowedComplexity: number;
-}
-export interface ConsistentArrayTypeOptions {
-	syntax: ConsistentArrayType;
-}
-/**
- * Rule's options.
- */
-export interface FilenamingConventionOptions {
-	/**
-	 * Allowed cases for _TypeScript_ `enum` member names.
-	 */
-	filenameCases: FilenameCases;
-	/**
-	 * If `false`, then consecutive uppercase are allowed in _camel_ and _pascal_ cases. This does not affect other [Case].
-	 */
-	strictCase: boolean;
 }
 /**
  * Options for the rule `useExhaustiveDependencies`
@@ -1445,30 +1552,33 @@ export interface HooksOptions {
  */
 export interface DeprecatedHooksOptions {}
 /**
+ * Options for the rule `noRestrictedImports`.
+ */
+export interface RestrictedImportsOptions {
+	/**
+	 * A list of names that should trigger the rule
+	 */
+	paths: {};
+}
+export interface ConsistentArrayTypeOptions {
+	syntax: ConsistentArrayType;
+}
+/**
  * Rule's options.
  */
-export interface NamingConventionOptions {
+export interface FilenamingConventionOptions {
 	/**
 	 * Allowed cases for _TypeScript_ `enum` member names.
 	 */
-	enumMemberCase: EnumMemberCase;
+	filenameCases: FilenameCases;
+	/**
+	 * If `false`, then non-ASCII characters are allowed.
+	 */
+	requireAscii: boolean;
 	/**
 	 * If `false`, then consecutive uppercase are allowed in _camel_ and _pascal_ cases. This does not affect other [Case].
 	 */
 	strictCase: boolean;
-}
-/**
- * Options for the rule `noRestrictedGlobals`.
- */
-export interface RestrictedGlobalsOptions {
-	/**
-	 * A list of names that should trigger the rule
-	 */
-	deniedGlobals: string[];
-}
-export interface ValidAriaRoleOptions {
-	allowInvalidRoles: string[];
-	ignoreNonDom: boolean;
 }
 export interface UtilityClassSortingOptions {
 	/**
@@ -1480,8 +1590,32 @@ export interface UtilityClassSortingOptions {
 	 */
 	functions?: string[];
 }
-export type ConsistentArrayType = "shorthand" | "generic";
-export type FilenameCases = FilenameCase[];
+/**
+ * Options for the rule `noRestrictedGlobals`.
+ */
+export interface RestrictedGlobalsOptions {
+	/**
+	 * A list of names that should trigger the rule
+	 */
+	deniedGlobals: string[];
+}
+/**
+ * Rule's options.
+ */
+export interface NamingConventionOptions {
+	/**
+	 * Allowed cases for _TypeScript_ `enum` member names.
+	 */
+	enumMemberCase: EnumMemberCase;
+	/**
+	 * If `false`, then non-ASCII characters are allowed.
+	 */
+	requireAscii: boolean;
+	/**
+	 * If `false`, then consecutive uppercase are allowed in _camel_ and _pascal_ cases. This does not affect other [Case].
+	 */
+	strictCase: boolean;
+}
 export interface Hooks {
 	/**
 	* The "position" of the closure function, starting from zero.
@@ -1498,6 +1632,8 @@ export interface Hooks {
 	 */
 	name: string;
 }
+export type ConsistentArrayType = "shorthand" | "generic";
+export type FilenameCases = FilenameCase[];
 /**
  * Supported cases for TypeScript `enum` member names.
  */
@@ -1511,20 +1647,27 @@ export type FilenameCase =
 	| "kebab-case"
 	| "PascalCase"
 	| "snake_case";
-export interface ProjectFeaturesParams {
-	manifest_path: RomePath;
+export interface UpdateProjectParams {
+	path: BiomePath;
 }
-export interface ProjectFeaturesResult {}
+export interface OpenProjectParams {
+	content: string;
+	path: BiomePath;
+	version: number;
+}
 export interface OpenFileParams {
 	content: string;
 	language_hint?: Language;
-	path: RomePath;
+	path: BiomePath;
 	version: number;
 }
 /**
  * Supported languages by Biome
  */
 export type Language =
+	| "Astro"
+	| "Vue"
+	| "Svelte"
 	| "JavaScript"
 	| "JavaScriptReact"
 	| "TypeScript"
@@ -1535,40 +1678,40 @@ export type Language =
 	| "Unknown";
 export interface ChangeFileParams {
 	content: string;
-	path: RomePath;
+	path: BiomePath;
 	version: number;
 }
 export interface CloseFileParams {
-	path: RomePath;
+	path: BiomePath;
 }
 export interface GetSyntaxTreeParams {
-	path: RomePath;
+	path: BiomePath;
 }
 export interface GetSyntaxTreeResult {
 	ast: string;
 	cst: string;
 }
 export interface OrganizeImportsParams {
-	path: RomePath;
+	path: BiomePath;
 }
 export interface OrganizeImportsResult {
 	code: string;
 }
 export interface GetFileContentParams {
-	path: RomePath;
+	path: BiomePath;
 }
 export interface GetControlFlowGraphParams {
 	cursor: TextSize;
-	path: RomePath;
+	path: BiomePath;
 }
 export type TextSize = number;
 export interface GetFormatterIRParams {
-	path: RomePath;
+	path: BiomePath;
 }
 export interface PullDiagnosticsParams {
 	categories: RuleCategories;
 	max_diagnostics: number;
-	path: RomePath;
+	path: BiomePath;
 }
 export type RuleCategories = RuleCategory[];
 export type RuleCategory = "Syntax" | "Lint" | "Action" | "Transformation";
@@ -1687,18 +1830,27 @@ export type Category =
 	| "lint/correctness/useValidForDirection"
 	| "lint/correctness/useYield"
 	| "lint/nursery/noApproximativeNumericConstant"
+	| "lint/nursery/noConsole"
 	| "lint/nursery/noDuplicateJsonKeys"
+	| "lint/nursery/noDuplicateTestHooks"
 	| "lint/nursery/noEmptyBlockStatements"
 	| "lint/nursery/noEmptyTypeParameters"
+	| "lint/nursery/noExcessiveNestedTestSuites"
+	| "lint/nursery/noExportsInTest"
 	| "lint/nursery/noFocusedTests"
 	| "lint/nursery/noGlobalAssign"
 	| "lint/nursery/noGlobalEval"
 	| "lint/nursery/noInvalidUseBeforeDeclaration"
 	| "lint/nursery/noMisleadingCharacterClass"
+	| "lint/nursery/noNamespaceImport"
 	| "lint/nursery/noNodejsModules"
+	| "lint/nursery/noReExportAll"
+	| "lint/nursery/noRestrictedImports"
+	| "lint/nursery/noSemicolonInJsx"
 	| "lint/nursery/noSkippedTests"
 	| "lint/nursery/noThenProperty"
 	| "lint/nursery/noTypeOnlyImportAttributes"
+	| "lint/nursery/noUndeclaredDependencies"
 	| "lint/nursery/noUnusedImports"
 	| "lint/nursery/noUnusedPrivateClassMembers"
 	| "lint/nursery/noUselessLoneBlockStatements"
@@ -1712,6 +1864,8 @@ export type Category =
 	| "lint/nursery/useGroupedTypeImport"
 	| "lint/nursery/useImportRestrictions"
 	| "lint/nursery/useImportType"
+	| "lint/nursery/useJsxKeyInIterable"
+	| "lint/nursery/useNodeAssertStrict"
 	| "lint/nursery/useNodejsImportProtocol"
 	| "lint/nursery/useNumberNamespace"
 	| "lint/nursery/useShorthandFunctionType"
@@ -1922,7 +2076,7 @@ export interface BacktraceSymbol {
 	name?: string;
 }
 export interface PullActionsParams {
-	path: RomePath;
+	path: BiomePath;
 	range: TextRange;
 }
 export interface PullActionsResult {
@@ -1975,7 +2129,7 @@ export type SourceActionKind =
  */
 export type Applicability = "Always" | "MaybeIncorrect";
 export interface FormatFileParams {
-	path: RomePath;
+	path: BiomePath;
 }
 export interface Printed {
 	code: string;
@@ -1997,16 +2151,16 @@ export interface SourceMarker {
 	source: TextSize;
 }
 export interface FormatRangeParams {
-	path: RomePath;
+	path: BiomePath;
 	range: TextRange;
 }
 export interface FormatOnTypeParams {
 	offset: TextSize;
-	path: RomePath;
+	path: BiomePath;
 }
 export interface FixFileParams {
 	fix_file_mode: FixFileMode;
-	path: RomePath;
+	path: BiomePath;
 	should_format: boolean;
 }
 /**
@@ -2043,7 +2197,7 @@ export interface FixAction {
 }
 export interface RenameParams {
 	new_name: string;
-	path: RomePath;
+	path: BiomePath;
 	symbol_at: TextSize;
 }
 export interface RenameResult {
@@ -2056,12 +2210,12 @@ export interface RenameResult {
 	 */
 	range: TextRange;
 }
+export type Configuration = PartialConfiguration;
 export interface Workspace {
 	fileFeatures(params: SupportsFeatureParams): Promise<SupportsFeatureResult>;
 	updateSettings(params: UpdateSettingsParams): Promise<void>;
-	projectFeatures(
-		params: ProjectFeaturesParams,
-	): Promise<ProjectFeaturesResult>;
+	updateCurrentProject(params: UpdateProjectParams): Promise<void>;
+	openProject(params: OpenProjectParams): Promise<void>;
 	openFile(params: OpenFileParams): Promise<void>;
 	changeFile(params: ChangeFileParams): Promise<void>;
 	closeFile(params: CloseFileParams): Promise<void>;
@@ -2091,8 +2245,11 @@ export function createWorkspace(transport: Transport): Workspace {
 		updateSettings(params) {
 			return transport.request("biome/update_settings", params);
 		},
-		projectFeatures(params) {
-			return transport.request("biome/project_features", params);
+		updateCurrentProject(params) {
+			return transport.request("biome/update_current_project", params);
+		},
+		openProject(params) {
+			return transport.request("biome/open_project", params);
 		},
 		openFile(params) {
 			return transport.request("biome/open_file", params);

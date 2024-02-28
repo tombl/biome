@@ -7,20 +7,6 @@ use biome_css_syntax::{
     *,
 };
 use biome_rowan::AstNode;
-pub fn css_all_property(
-    name: CssIdentifier,
-    colon_token: SyntaxToken,
-    value: AnyCssAllPropertyValue,
-) -> CssAllProperty {
-    CssAllProperty::unwrap_cast(SyntaxNode::new_detached(
-        CssSyntaxKind::CSS_ALL_PROPERTY,
-        [
-            Some(SyntaxElement::Node(name.into_syntax())),
-            Some(SyntaxElement::Token(colon_token)),
-            Some(SyntaxElement::Node(value.into_syntax())),
-        ],
-    ))
-}
 pub fn css_at_rule(at_token: SyntaxToken, rule: AnyCssAtRule) -> CssAtRule {
     CssAtRule::unwrap_cast(SyntaxNode::new_detached(
         CssSyntaxKind::CSS_AT_RULE,
@@ -129,12 +115,6 @@ impl CssAttributeSelectorBuilder {
         ))
     }
 }
-pub fn css_auto(value_token: SyntaxToken) -> CssAuto {
-    CssAuto::unwrap_cast(SyntaxNode::new_detached(
-        CssSyntaxKind::CSS_AUTO,
-        [Some(SyntaxElement::Token(value_token))],
-    ))
-}
 pub fn css_binary_expression(
     left: AnyCssExpression,
     operator_token_token: SyntaxToken,
@@ -146,59 +126,6 @@ pub fn css_binary_expression(
             Some(SyntaxElement::Node(left.into_syntax())),
             Some(SyntaxElement::Token(operator_token_token)),
             Some(SyntaxElement::Node(right.into_syntax())),
-        ],
-    ))
-}
-pub fn css_border() -> CssBorderBuilder {
-    CssBorderBuilder {
-        line_width: None,
-        line_style: None,
-        color: None,
-    }
-}
-pub struct CssBorderBuilder {
-    line_width: Option<AnyCssLineWidth>,
-    line_style: Option<CssLineStyle>,
-    color: Option<CssColor>,
-}
-impl CssBorderBuilder {
-    pub fn with_line_width(mut self, line_width: AnyCssLineWidth) -> Self {
-        self.line_width = Some(line_width);
-        self
-    }
-    pub fn with_line_style(mut self, line_style: CssLineStyle) -> Self {
-        self.line_style = Some(line_style);
-        self
-    }
-    pub fn with_color(mut self, color: CssColor) -> Self {
-        self.color = Some(color);
-        self
-    }
-    pub fn build(self) -> CssBorder {
-        CssBorder::unwrap_cast(SyntaxNode::new_detached(
-            CssSyntaxKind::CSS_BORDER,
-            [
-                self.line_width
-                    .map(|token| SyntaxElement::Node(token.into_syntax())),
-                self.line_style
-                    .map(|token| SyntaxElement::Node(token.into_syntax())),
-                self.color
-                    .map(|token| SyntaxElement::Node(token.into_syntax())),
-            ],
-        ))
-    }
-}
-pub fn css_border_property(
-    name: CssIdentifier,
-    colon_token: SyntaxToken,
-    value: AnyCssBorderPropertyValue,
-) -> CssBorderProperty {
-    CssBorderProperty::unwrap_cast(SyntaxNode::new_detached(
-        CssSyntaxKind::CSS_BORDER_PROPERTY,
-        [
-            Some(SyntaxElement::Node(name.into_syntax())),
-            Some(SyntaxElement::Token(colon_token)),
-            Some(SyntaxElement::Node(value.into_syntax())),
         ],
     ))
 }
@@ -562,17 +489,47 @@ pub fn css_declaration_or_at_rule_block(
         ],
     ))
 }
-pub fn css_declaration_with_semicolon(
-    declaration: CssDeclaration,
-    semicolon_token: SyntaxToken,
-) -> CssDeclarationWithSemicolon {
-    CssDeclarationWithSemicolon::unwrap_cast(SyntaxNode::new_detached(
-        CssSyntaxKind::CSS_DECLARATION_WITH_SEMICOLON,
+pub fn css_declaration_or_rule_block(
+    l_curly_token: SyntaxToken,
+    items: CssDeclarationOrRuleList,
+    r_curly_token: SyntaxToken,
+) -> CssDeclarationOrRuleBlock {
+    CssDeclarationOrRuleBlock::unwrap_cast(SyntaxNode::new_detached(
+        CssSyntaxKind::CSS_DECLARATION_OR_RULE_BLOCK,
         [
-            Some(SyntaxElement::Node(declaration.into_syntax())),
-            Some(SyntaxElement::Token(semicolon_token)),
+            Some(SyntaxElement::Token(l_curly_token)),
+            Some(SyntaxElement::Node(items.into_syntax())),
+            Some(SyntaxElement::Token(r_curly_token)),
         ],
     ))
+}
+pub fn css_declaration_with_semicolon(
+    declaration: CssDeclaration,
+) -> CssDeclarationWithSemicolonBuilder {
+    CssDeclarationWithSemicolonBuilder {
+        declaration,
+        semicolon_token: None,
+    }
+}
+pub struct CssDeclarationWithSemicolonBuilder {
+    declaration: CssDeclaration,
+    semicolon_token: Option<SyntaxToken>,
+}
+impl CssDeclarationWithSemicolonBuilder {
+    pub fn with_semicolon_token(mut self, semicolon_token: SyntaxToken) -> Self {
+        self.semicolon_token = Some(semicolon_token);
+        self
+    }
+    pub fn build(self) -> CssDeclarationWithSemicolon {
+        CssDeclarationWithSemicolon::unwrap_cast(SyntaxNode::new_detached(
+            CssSyntaxKind::CSS_DECLARATION_WITH_SEMICOLON,
+            [
+                Some(SyntaxElement::Node(self.declaration.into_syntax())),
+                self.semicolon_token
+                    .map(|token| SyntaxElement::Token(token)),
+            ],
+        ))
+    }
 }
 pub fn css_document_at_rule(
     document_token: SyntaxToken,
@@ -612,6 +569,48 @@ pub fn css_font_face_at_rule(
         CssSyntaxKind::CSS_FONT_FACE_AT_RULE,
         [
             Some(SyntaxElement::Token(font_face_token)),
+            Some(SyntaxElement::Node(block.into_syntax())),
+        ],
+    ))
+}
+pub fn css_font_feature_values_at_rule(
+    font_feature_values_token: SyntaxToken,
+    name: AnyCssFontFamilyName,
+    block: AnyCssFontFeatureValuesBlock,
+) -> CssFontFeatureValuesAtRule {
+    CssFontFeatureValuesAtRule::unwrap_cast(SyntaxNode::new_detached(
+        CssSyntaxKind::CSS_FONT_FEATURE_VALUES_AT_RULE,
+        [
+            Some(SyntaxElement::Token(font_feature_values_token)),
+            Some(SyntaxElement::Node(name.into_syntax())),
+            Some(SyntaxElement::Node(block.into_syntax())),
+        ],
+    ))
+}
+pub fn css_font_feature_values_block(
+    l_curly_token: SyntaxToken,
+    items: CssFontFeatureValuesItemList,
+    r_curly_token: SyntaxToken,
+) -> CssFontFeatureValuesBlock {
+    CssFontFeatureValuesBlock::unwrap_cast(SyntaxNode::new_detached(
+        CssSyntaxKind::CSS_FONT_FEATURE_VALUES_BLOCK,
+        [
+            Some(SyntaxElement::Token(l_curly_token)),
+            Some(SyntaxElement::Node(items.into_syntax())),
+            Some(SyntaxElement::Token(r_curly_token)),
+        ],
+    ))
+}
+pub fn css_font_feature_values_item(
+    at_token: SyntaxToken,
+    name_token: SyntaxToken,
+    block: AnyCssDeclarationListBlock,
+) -> CssFontFeatureValuesItem {
+    CssFontFeatureValuesItem::unwrap_cast(SyntaxNode::new_detached(
+        CssSyntaxKind::CSS_FONT_FEATURE_VALUES_ITEM,
+        [
+            Some(SyntaxElement::Token(at_token)),
+            Some(SyntaxElement::Token(name_token)),
             Some(SyntaxElement::Node(block.into_syntax())),
         ],
     ))
@@ -854,18 +853,6 @@ pub fn css_layer_reference(
         ],
     ))
 }
-pub fn css_line_style(keyword_token: SyntaxToken) -> CssLineStyle {
-    CssLineStyle::unwrap_cast(SyntaxNode::new_detached(
-        CssSyntaxKind::CSS_LINE_STYLE,
-        [Some(SyntaxElement::Token(keyword_token))],
-    ))
-}
-pub fn css_line_width_keyword(keyword_token: SyntaxToken) -> CssLineWidthKeyword {
-    CssLineWidthKeyword::unwrap_cast(SyntaxNode::new_detached(
-        CssSyntaxKind::CSS_LINE_WIDTH_KEYWORD,
-        [Some(SyntaxElement::Token(keyword_token))],
-    ))
-}
 pub fn css_list_of_component_values_expression(
     css_component_value_list: CssComponentValueList,
 ) -> CssListOfComponentValuesExpression {
@@ -879,7 +866,7 @@ pub fn css_list_of_component_values_expression(
 pub fn css_margin_at_rule(
     at_token: SyntaxToken,
     name_token: SyntaxToken,
-    block: CssDeclarationOrAtRuleBlock,
+    block: AnyCssDeclarationOrAtRuleBlock,
 ) -> CssMarginAtRule {
     CssMarginAtRule::unwrap_cast(SyntaxNode::new_detached(
         CssSyntaxKind::CSS_MARGIN_AT_RULE,
@@ -1091,6 +1078,18 @@ impl CssNamespaceAtRuleBuilder {
         ))
     }
 }
+pub fn css_nested_qualified_rule(
+    prelude: CssRelativeSelectorList,
+    block: AnyCssDeclarationOrRuleBlock,
+) -> CssNestedQualifiedRule {
+    CssNestedQualifiedRule::unwrap_cast(SyntaxNode::new_detached(
+        CssSyntaxKind::CSS_NESTED_QUALIFIED_RULE,
+        [
+            Some(SyntaxElement::Node(prelude.into_syntax())),
+            Some(SyntaxElement::Node(block.into_syntax())),
+        ],
+    ))
+}
 pub fn css_nth_offset(sign_token: SyntaxToken, value: CssNumber) -> CssNthOffset {
     CssNthOffset::unwrap_cast(SyntaxNode::new_detached(
         CssSyntaxKind::CSS_NTH_OFFSET,
@@ -1213,6 +1212,20 @@ pub fn css_percentage(value_token: SyntaxToken, percent_token: SyntaxToken) -> C
         [
             Some(SyntaxElement::Token(value_token)),
             Some(SyntaxElement::Token(percent_token)),
+        ],
+    ))
+}
+pub fn css_property_at_rule(
+    property_token: SyntaxToken,
+    name: CssDashedIdentifier,
+    block: AnyCssDeclarationListBlock,
+) -> CssPropertyAtRule {
+    CssPropertyAtRule::unwrap_cast(SyntaxNode::new_detached(
+        CssSyntaxKind::CSS_PROPERTY_AT_RULE,
+        [
+            Some(SyntaxElement::Token(property_token)),
+            Some(SyntaxElement::Node(name.into_syntax())),
+            Some(SyntaxElement::Node(block.into_syntax())),
         ],
     ))
 }
@@ -1526,7 +1539,7 @@ pub fn css_pseudo_element_selector(
 }
 pub fn css_qualified_rule(
     prelude: CssSelectorList,
-    block: AnyCssDeclarationListBlock,
+    block: AnyCssDeclarationOrRuleBlock,
 ) -> CssQualifiedRule {
     CssQualifiedRule::unwrap_cast(SyntaxNode::new_detached(
         CssSyntaxKind::CSS_QUALIFIED_RULE,
@@ -1965,16 +1978,6 @@ pub fn css_unknown_dimension(
         ],
     ))
 }
-pub fn css_unknown_property_value(
-    css_generic_component_value_list: CssGenericComponentValueList,
-) -> CssUnknownPropertyValue {
-    CssUnknownPropertyValue::unwrap_cast(SyntaxNode::new_detached(
-        CssSyntaxKind::CSS_UNKNOWN_PROPERTY_VALUE,
-        [Some(SyntaxElement::Node(
-            css_generic_component_value_list.into_syntax(),
-        ))],
-    ))
-}
 pub fn css_url_function(
     name_token: SyntaxToken,
     l_paren_token: SyntaxToken,
@@ -2021,26 +2024,6 @@ pub fn css_url_value_raw(value_token: SyntaxToken) -> CssUrlValueRaw {
         [Some(SyntaxElement::Token(value_token))],
     ))
 }
-pub fn css_wide_keyword(value_token: SyntaxToken) -> CssWideKeyword {
-    CssWideKeyword::unwrap_cast(SyntaxNode::new_detached(
-        CssSyntaxKind::CSS_WIDE_KEYWORD,
-        [Some(SyntaxElement::Token(value_token))],
-    ))
-}
-pub fn css_z_index_property(
-    name: CssIdentifier,
-    colon_token: SyntaxToken,
-    value: AnyCssZIndexPropertyValue,
-) -> CssZIndexProperty {
-    CssZIndexProperty::unwrap_cast(SyntaxNode::new_detached(
-        CssSyntaxKind::CSS_Z_INDEX_PROPERTY,
-        [
-            Some(SyntaxElement::Node(name.into_syntax())),
-            Some(SyntaxElement::Token(colon_token)),
-            Some(SyntaxElement::Node(value.into_syntax())),
-        ],
-    ))
-}
 pub fn css_component_value_list<I>(items: I) -> CssComponentValueList
 where
     I: IntoIterator<Item = AnyCssValue>,
@@ -2074,25 +2057,16 @@ where
         }),
     ))
 }
-pub fn css_declaration_list<I, S>(items: I, separators: S) -> CssDeclarationList
+pub fn css_declaration_list<I>(items: I) -> CssDeclarationList
 where
-    I: IntoIterator<Item = CssDeclaration>,
+    I: IntoIterator<Item = CssDeclarationWithSemicolon>,
     I::IntoIter: ExactSizeIterator,
-    S: IntoIterator<Item = CssSyntaxToken>,
-    S::IntoIter: ExactSizeIterator,
 {
-    let mut items = items.into_iter();
-    let mut separators = separators.into_iter();
-    let length = items.len() + separators.len();
     CssDeclarationList::unwrap_cast(SyntaxNode::new_detached(
         CssSyntaxKind::CSS_DECLARATION_LIST,
-        (0..length).map(|index| {
-            if index % 2 == 0 {
-                Some(items.next()?.into_syntax().into())
-            } else {
-                Some(separators.next()?.into())
-            }
-        }),
+        items
+            .into_iter()
+            .map(|item| Some(item.into_syntax().into())),
     ))
 }
 pub fn css_declaration_or_at_rule_list<I>(items: I) -> CssDeclarationOrAtRuleList
@@ -2102,6 +2076,18 @@ where
 {
     CssDeclarationOrAtRuleList::unwrap_cast(SyntaxNode::new_detached(
         CssSyntaxKind::CSS_DECLARATION_OR_AT_RULE_LIST,
+        items
+            .into_iter()
+            .map(|item| Some(item.into_syntax().into())),
+    ))
+}
+pub fn css_declaration_or_rule_list<I>(items: I) -> CssDeclarationOrRuleList
+where
+    I: IntoIterator<Item = AnyCssDeclarationOrRule>,
+    I::IntoIter: ExactSizeIterator,
+{
+    CssDeclarationOrRuleList::unwrap_cast(SyntaxNode::new_detached(
+        CssSyntaxKind::CSS_DECLARATION_OR_RULE_LIST,
         items
             .into_iter()
             .map(|item| Some(item.into_syntax().into())),
@@ -2126,6 +2112,18 @@ where
                 Some(separators.next()?.into())
             }
         }),
+    ))
+}
+pub fn css_font_feature_values_item_list<I>(items: I) -> CssFontFeatureValuesItemList
+where
+    I: IntoIterator<Item = AnyCssFontFeatureValuesItem>,
+    I::IntoIter: ExactSizeIterator,
+{
+    CssFontFeatureValuesItemList::unwrap_cast(SyntaxNode::new_detached(
+        CssSyntaxKind::CSS_FONT_FEATURE_VALUES_ITEM_LIST,
+        items
+            .into_iter()
+            .map(|item| Some(item.into_syntax().into())),
     ))
 }
 pub fn css_generic_component_value_list<I>(items: I) -> CssGenericComponentValueList
@@ -2445,6 +2443,16 @@ where
 {
     CssBogusDocumentMatcher::unwrap_cast(SyntaxNode::new_detached(
         CssSyntaxKind::CSS_BOGUS_DOCUMENT_MATCHER,
+        slots,
+    ))
+}
+pub fn css_bogus_font_feature_values_item<I>(slots: I) -> CssBogusFontFeatureValuesItem
+where
+    I: IntoIterator<Item = Option<SyntaxElement>>,
+    I::IntoIter: ExactSizeIterator,
+{
+    CssBogusFontFeatureValuesItem::unwrap_cast(SyntaxNode::new_detached(
+        CssSyntaxKind::CSS_BOGUS_FONT_FEATURE_VALUES_ITEM,
         slots,
     ))
 }

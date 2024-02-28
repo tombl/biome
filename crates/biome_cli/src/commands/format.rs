@@ -1,6 +1,6 @@
 use crate::changed::get_changed_files;
 use crate::cli_options::CliOptions;
-use crate::commands::{get_stdin, validate_configuration_diagnostics};
+use crate::commands::{get_stdin, resolve_manifest, validate_configuration_diagnostics};
 use crate::diagnostics::DeprecatedArgument;
 use crate::execute::ReportMode;
 use crate::{
@@ -9,23 +9,21 @@ use crate::{
 use biome_console::{markup, ConsoleExt};
 use biome_deserialize::Merge;
 use biome_diagnostics::PrintDiagnostic;
-use biome_service::configuration::css::CssFormatter;
-use biome_service::configuration::json::JsonFormatter;
-use biome_service::configuration::vcs::VcsConfiguration;
+use biome_service::configuration::vcs::PartialVcsConfiguration;
 use biome_service::configuration::{
-    load_configuration, FilesConfiguration, FormatterConfiguration, LoadedConfiguration,
+    load_configuration, LoadedConfiguration, PartialCssFormatter, PartialFilesConfiguration,
+    PartialFormatterConfiguration, PartialJavascriptFormatter, PartialJsonFormatter,
 };
 use biome_service::workspace::UpdateSettingsParams;
-use biome_service::JavascriptFormatter;
 use std::ffi::OsString;
 
 pub(crate) struct FormatCommandPayload {
-    pub(crate) javascript_formatter: Option<JavascriptFormatter>,
-    pub(crate) json_formatter: Option<JsonFormatter>,
-    pub(crate) css_formatter: Option<CssFormatter>,
-    pub(crate) formatter_configuration: Option<FormatterConfiguration>,
-    pub(crate) vcs_configuration: Option<VcsConfiguration>,
-    pub(crate) files_configuration: Option<FilesConfiguration>,
+    pub(crate) javascript_formatter: Option<PartialJavascriptFormatter>,
+    pub(crate) json_formatter: Option<PartialJsonFormatter>,
+    pub(crate) css_formatter: Option<PartialCssFormatter>,
+    pub(crate) formatter_configuration: Option<PartialFormatterConfiguration>,
+    pub(crate) vcs_configuration: Option<PartialVcsConfiguration>,
+    pub(crate) files_configuration: Option<PartialFilesConfiguration>,
     pub(crate) stdin_file_path: Option<String>,
     pub(crate) write: bool,
     pub(crate) cli_options: CliOptions,
@@ -36,7 +34,7 @@ pub(crate) struct FormatCommandPayload {
 
 /// Handler for the "format" command of the Biome CLI
 pub(crate) fn format(
-    mut session: CliSession,
+    session: CliSession,
     payload: FormatCommandPayload,
 ) -> Result<(), CliDiagnostic> {
     let FormatCommandPayload {
@@ -62,15 +60,16 @@ pub(crate) fn format(
         session.app.console,
         cli_options.verbose,
     )?;
+    resolve_manifest(&session)?;
     let LoadedConfiguration {
         mut configuration,
         directory_path: configuration_path,
         ..
     } = loaded_configuration;
     // TODO: remove in biome 2.0
+    let console = &mut *session.app.console;
     if let Some(config) = formatter_configuration.as_mut() {
         if let Some(indent_size) = config.indent_size {
-            let console = &mut session.app.console;
             let diagnostic = DeprecatedArgument::new(markup! {
                 "The argument "<Emphasis>"--indent-size"</Emphasis>" is deprecated, it will be removed in the next major release. Use "<Emphasis>"--indent-width"</Emphasis>" instead."
             });
@@ -84,7 +83,6 @@ pub(crate) fn format(
     // TODO: remove in biome 2.0
     if let Some(js_formatter) = javascript_formatter.as_mut() {
         if let Some(indent_size) = js_formatter.indent_size {
-            let console = &mut session.app.console;
             let diagnostic = DeprecatedArgument::new(markup! {
                 "The argument "<Emphasis>"--javascript-formatter-indent-size"</Emphasis>" is deprecated, it will be removed in the next major release. Use "<Emphasis>"--javascript-formatter-indent-width"</Emphasis>" instead."
             });
@@ -98,7 +96,6 @@ pub(crate) fn format(
     // TODO: remove in biome 2.0
     if let Some(json_formatter) = json_formatter.as_mut() {
         if let Some(indent_size) = json_formatter.indent_size {
-            let console = &mut session.app.console;
             let diagnostic = DeprecatedArgument::new(markup! {
                 "The argument "<Emphasis>"--json-formatter-indent-size"</Emphasis>" is deprecated, it will be removed in the next major release. Use "<Emphasis>"--json-formatter-indent-width"</Emphasis>" instead."
             });
@@ -112,7 +109,6 @@ pub(crate) fn format(
     // TODO: remove in biome 2.0
     if let Some(css_formatter) = css_formatter.as_mut() {
         if let Some(indent_size) = css_formatter.indent_size {
-            let console = &mut session.app.console;
             let diagnostic = DeprecatedArgument::new(markup! {
                 "The argument "<Emphasis>"--css-formatter-indent-size"</Emphasis>" is deprecated, it will be removed in the next major release. Use "<Emphasis>"--css-formatter-indent-width"</Emphasis>" instead."
             });
@@ -132,7 +128,7 @@ pub(crate) fn format(
     if !configuration
         .formatter
         .as_ref()
-        .is_some_and(FormatterConfiguration::is_disabled)
+        .is_some_and(PartialFormatterConfiguration::is_disabled)
     {
         let formatter = configuration.formatter.get_or_insert_with(Default::default);
         if let Some(formatter_configuration) = formatter_configuration {
@@ -176,7 +172,7 @@ pub(crate) fn format(
             gitignore_matches,
         })?;
 
-    let stdin = get_stdin(stdin_file_path, &mut *session.app.console, "format")?;
+    let stdin = get_stdin(stdin_file_path, console, "format")?;
 
     let execution = if cli_options.json {
         Execution::with_report(

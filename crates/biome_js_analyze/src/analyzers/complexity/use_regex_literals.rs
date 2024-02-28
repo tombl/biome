@@ -45,7 +45,7 @@ declare_rule! {
     /// new RegExp("abc", flags);
     /// ```
     ///
-    pub(crate) UseRegexLiterals {
+    pub UseRegexLiterals {
         version: "1.3.0",
         name: "useRegexLiterals",
         source: RuleSource::Eslint("prefer-regex-literals"),
@@ -55,7 +55,7 @@ declare_rule! {
 }
 
 declare_node_union! {
-    pub(crate) JsNewOrCallExpression = JsNewExpression | JsCallExpression
+    pub JsNewOrCallExpression = JsNewExpression | JsCallExpression
 }
 
 pub struct UseRegexLiteralsState {
@@ -172,6 +172,9 @@ fn create_pattern(
     };
     let pattern = extract_literal_string(pattern)?;
     let pattern = pattern.replace("\\\\", "\\");
+
+    // Convert slash to "\/" to avoid parsing error in autofix.
+    let pattern = pattern.replace('/', "\\/");
 
     // If pattern is empty, (?:) is used instead.
     if pattern.is_empty() {

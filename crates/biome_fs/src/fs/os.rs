@@ -3,9 +3,10 @@ use super::{BoxedTraversal, ErrorKind, File, FileSystemDiagnostic, ForEachPath};
 use crate::fs::OpenOptions;
 use crate::{
     fs::{TraversalContext, TraversalScope},
-    FileSystem, RomePath,
+    BiomePath, FileSystem,
 };
 use biome_diagnostics::{adapters::IoError, DiagnosticExt, Error, Severity};
+use oxc_resolver::{Resolution, ResolveError, ResolveOptions, Resolver};
 use dashmap::{ DashSet};
 use parking_lot::{ RwLock};
 use rayon::{scope, Scope};
@@ -24,15 +25,21 @@ const MAX_SYMLINK_DEPTH: u8 = 3;
 
 /// Implementation of [FileSystem] that directly calls through to the underlying OS
 pub struct OsFileSystem {
-    working_directory: Option<PathBuf>,
+    pub working_directory: Option<PathBuf>,
+    pub configuration_resolver: AssertUnwindSafe<Resolver>,
     paths: AssertUnwindSafe<RwLock<DashSet<PathBuf>>>,
+
 }
 
 impl OsFileSystem {
-    pub fn new_working_directory(path: PathBuf) -> Self {
+    pub fn new(working_directory: PathBuf) -> Self {
         Self {
-            working_directory: Some(path),
-            ..OsFileSystem::default()
+            working_directory: Some(working_directory),
+            configuration_resolver: AssertUnwindSafe(Resolver::new(ResolveOptions {
+                condition_names: vec!["node".to_string(), "import".to_string()],
+                extensions: vec!["*.json".to_string()],
+                ..ResolveOptions::default()
+            })),
         }
     }
 }
@@ -41,6 +48,11 @@ impl Default for OsFileSystem {
     fn default() -> Self {
         Self {
             working_directory: env::current_dir().ok(),
+            configuration_resolver: AssertUnwindSafe(Resolver::new(ResolveOptions {
+                condition_names: vec!["node".to_string(), "import".to_string()],
+                extensions: vec!["*.json".to_string(), "*.jsonc".to_string()],
+                ..ResolveOptions::default()
+            })),
             paths: Default::default(),
         }
     }
@@ -83,6 +95,15 @@ impl FileSystem for OsFileSystem {
         path.exists()
     }
 
+    fn path_is_file(&self, path: &Path) -> bool {
+        path.is_file()
+    }
+
+    fn resolve_configuration(&self, specifier: &str) -> Result<Resolution, ResolveError> {
+        self.configuration_resolver
+            .resolve(self.working_directory().unwrap(), specifier)
+    }
+
     fn get_changed_files(&self, base: &str) -> io::Result<Vec<String>> {
         let output = Command::new("git")
             .arg("diff")
@@ -120,7 +141,7 @@ impl File for OsFile {
     }
 
     fn set_content(&mut self, content: &[u8]) -> io::Result<()> {
-        tracing::debug_span!("OsFile::set_content").in_scope(move || {
+        tracing::trace_span!("OsFile::set_content").in_scope(move || {
             // Truncate the file
             self.inner.set_len(0)?;
             // Reset the cursor to the starting position
@@ -160,8 +181,8 @@ impl<'scope> OsTraversalScope<'scope> {
 }
 
 impl<'scope> TraversalScope<'scope> for OsTraversalScope<'scope> {
-    fn spawn(&self, ctx: &'scope dyn TraversalContext, mut path: PathBuf) {
-        let mut file_type = match path.metadata() {
+    fn spawn(&self, ctx: &'scope dyn TraversalContext, path: PathBuf) {
+        let file_type = match path.metadata() {
             Ok(meta) => meta.file_type(),
             Err(err) => {
                 ctx.push_diagnostic(
@@ -170,37 +191,7 @@ impl<'scope> TraversalScope<'scope> for OsTraversalScope<'scope> {
                 return;
             }
         };
-
-        if file_type.is_symlink() {
-            let Ok((target_path, target_file_type)) = expand_symbolic_link(path, ctx) else {
-                return;
-            };
-
-            path = target_path;
-            file_type = target_file_type;
-        }
-
-        let _ = ctx.interner().intern_path(path.clone());
-
-        if file_type.is_dir() {
-            self.scope.spawn(move |scope| {
-                handle_dir(scope, ctx, &path, None);
-            });
-            return;
-        }
-
-        if file_type.is_file() {
-            self.scope.spawn(move |_| {
-                ctx.handle_file(&path);
-            });
-            return;
-        }
-
-        ctx.push_diagnostic(Error::from(FileSystemDiagnostic {
-            path: path.to_string_lossy().to_string(),
-            error_kind: ErrorKind::from(file_type),
-            severity: Severity::Warning,
-        }));
+        handle_any_file(&self.scope, ctx, path, file_type, None);
     }
 }
 
@@ -247,11 +238,10 @@ fn handle_dir_entry<'scope>(
     ctx: &'scope dyn TraversalContext,
     entry: DirEntry,
     // The unresolved origin path in case the directory is behind a symbolic link
-    mut origin_path: Option<PathBuf>,
+    origin_path: Option<PathBuf>,
 ) {
-    let mut path = entry.path();
-
-    let mut file_type = match entry.file_type() {
+    let path = entry.path();
+    let file_type = match entry.file_type() {
         Ok(file_type) => file_type,
         Err(err) => {
             ctx.push_diagnostic(
@@ -260,8 +250,21 @@ fn handle_dir_entry<'scope>(
             return;
         }
     };
+    handle_any_file(scope, ctx, path, file_type, origin_path);
+}
 
+fn handle_any_file<'scope>(
+    scope: &Scope<'scope>,
+    ctx: &'scope dyn TraversalContext,
+    mut path: PathBuf,
+    mut file_type: FileType,
+    // The unresolved origin path in case the directory is behind a symbolic link
+    mut origin_path: Option<PathBuf>,
+) {
     if file_type.is_symlink() {
+        if !ctx.can_handle(&BiomePath::new(path.clone())) {
+            return;
+        }
         let Ok((target_path, target_file_type)) = expand_symbolic_link(path.clone(), ctx) else {
             return;
         };
@@ -276,10 +279,36 @@ fn handle_dir_entry<'scope>(
     }
 
     let inserted = ctx.interner().intern_path(path.clone());
-
     if !inserted {
         // If the path was already inserted, it could have been pointed at by
         // multiple symlinks. No need to traverse again.
+        return;
+    }
+
+    // In case the file is inside a directory that is behind a symbolic link,
+    // the unresolved origin path is used to construct a new path.
+    // This is required to support ignore patterns to symbolic links.
+    let biome_path = if let Some(origin_path) = &origin_path {
+        if let Some(file_name) = path.file_name() {
+            BiomePath::new(origin_path.join(file_name))
+        } else {
+            ctx.push_diagnostic(Error::from(FileSystemDiagnostic {
+                path: path.to_string_lossy().to_string(),
+                error_kind: ErrorKind::UnknownFileType,
+                severity: Severity::Warning,
+            }));
+            return;
+        }
+    } else {
+        BiomePath::new(&path)
+    };
+
+    // Performing this check here let's us skip unsupported
+    // files entirely, as well as silently ignore unsupported files when
+    // doing a directory traversal, but printing an error message if the
+    // user explicitly requests an unsupported file to be handled.
+    // This check also works for symbolic links.
+    if !ctx.can_handle(&biome_path) {
         return;
     }
 
@@ -291,36 +320,18 @@ fn handle_dir_entry<'scope>(
     }
 
     if file_type.is_file() {
-        // In case the file is inside a directory that is behind a symbolic link,
-        // the unresolved origin path is used to construct a new path.
-        // This is required to support ignore patterns to symbolic links.
-        let rome_path = if let Some(origin_path) = origin_path {
-            if let Some(file_name) = path.file_name() {
-                RomePath::new(origin_path.join(file_name))
-            } else {
-                ctx.push_diagnostic(Error::from(FileSystemDiagnostic {
-                    path: path.to_string_lossy().to_string(),
-                    error_kind: ErrorKind::UnknownFileType,
-                    severity: Severity::Warning,
-                }));
-                return;
-            }
-        } else {
-            RomePath::new(&path)
-        };
-
-        // Performing this check here let's us skip skip unsupported
-        // files entirely, as well as silently ignore unsupported files when
-        // doing a directory traversal, but printing an error message if the
-        // user explicitly requests an unsupported file to be handled.
-        // This check also works for symbolic links.
-        if ctx.can_handle(&rome_path) {
             scope.spawn(move |_| {
                 ctx.handle_file(&path);
                 // ctx.store_file(&path);
             });
-        }
+        return;
     }
+
+    ctx.push_diagnostic(Error::from(FileSystemDiagnostic {
+        path: path.to_string_lossy().to_string(),
+        error_kind: ErrorKind::from(file_type),
+        severity: Severity::Warning,
+    }));
 }
 
 /// Indicates a symbolic link could not be expanded.
@@ -403,8 +414,8 @@ fn follow_symlink(
     Ok((target_path, target_file_type))
 }
 
-impl From<fs::FileType> for ErrorKind {
-    fn from(_: fs::FileType) -> Self {
+impl From<FileType> for ErrorKind {
+    fn from(_: FileType) -> Self {
         Self::UnknownFileType
     }
 }

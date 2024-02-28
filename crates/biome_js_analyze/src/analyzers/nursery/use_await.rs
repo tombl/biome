@@ -3,7 +3,9 @@ use biome_analyze::{
     RuleDiagnostic, RuleSource, ServiceBag, Visitor, VisitorContext,
 };
 use biome_console::markup;
-use biome_js_syntax::{AnyFunctionLike, JsAwaitExpression, JsLanguage, TextRange, WalkEvent};
+use biome_js_syntax::{
+    AnyFunctionLike, JsAwaitExpression, JsForOfStatement, JsLanguage, TextRange, WalkEvent,
+};
 use biome_rowan::{AstNode, AstNodeList, Language, SyntaxNode, TextSize};
 
 declare_rule! {
@@ -43,7 +45,7 @@ declare_rule! {
     /// // Nor does it warn about empty `async` functions
     /// async function noop() { }
     /// ```
-    pub(crate) UseAwait {
+    pub UseAwait {
         version: "1.4.0",
         name: "useAwait",
         source: RuleSource::Eslint("require-await"),
@@ -73,10 +75,11 @@ impl Visitor for MissingAwaitVisitor {
                         self.stack.push((node.range().start(), false));
                     }
                 }
-
-                if JsAwaitExpression::can_cast(node.kind()) {
-                    if let Some((_, has_await)) = self.stack.last_mut() {
+                if let Some((_, has_await)) = self.stack.last_mut() {
+                    if JsAwaitExpression::can_cast(node.kind()) {
                         *has_await = true;
+                    } else if let Some(for_of) = JsForOfStatement::cast_ref(node) {
+                        *has_await = *has_await || for_of.await_token().is_some();
                     }
                 }
             }
@@ -96,7 +99,7 @@ impl Visitor for MissingAwaitVisitor {
     }
 }
 
-pub(crate) struct MissingAwait(AnyFunctionLike);
+pub struct MissingAwait(AnyFunctionLike);
 
 impl QueryMatch for MissingAwait {
     fn text_range(&self) -> TextRange {

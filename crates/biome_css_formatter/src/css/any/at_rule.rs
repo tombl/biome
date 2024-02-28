@@ -13,6 +13,7 @@ impl FormatRule<AnyCssAtRule> for FormatAnyCssAtRule {
             AnyCssAtRule::CssCounterStyleAtRule(node) => node.format().fmt(f),
             AnyCssAtRule::CssContainerAtRule(node) => node.format().fmt(f),
             AnyCssAtRule::CssFontFaceAtRule(node) => node.format().fmt(f),
+            AnyCssAtRule::CssFontFeatureValuesAtRule(node) => node.format().fmt(f),
             AnyCssAtRule::CssFontPaletteValuesAtRule(node) => node.format().fmt(f),
             AnyCssAtRule::CssKeyframesAtRule(node) => node.format().fmt(f),
             AnyCssAtRule::CssMediaAtRule(node) => node.format().fmt(f),
@@ -25,6 +26,7 @@ impl FormatRule<AnyCssAtRule> for FormatAnyCssAtRule {
             AnyCssAtRule::CssStartingStyleAtRule(node) => node.format().fmt(f),
             AnyCssAtRule::CssDocumentAtRule(node) => node.format().fmt(f),
             AnyCssAtRule::CssBogusAtRule(node) => node.format().fmt(f),
+            AnyCssAtRule::CssPropertyAtRule(node) => node.format().fmt(f),
         }
     }
 }

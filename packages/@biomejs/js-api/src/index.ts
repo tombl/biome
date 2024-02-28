@@ -1,14 +1,15 @@
 import type {
-	Configuration,
+	BiomePath,
 	Diagnostic,
+	PartialConfiguration,
 	PullDiagnosticsResult,
-	RomePath,
 	Workspace,
 } from "@biomejs/wasm-nodejs";
 import { Distribution, type WasmModule, loadModule, wrapError } from "./wasm";
 
 // Re-export of some useful types for users
-export type { Configuration, Diagnostic };
+export type Configuration = PartialConfiguration;
+export type { Diagnostic };
 export { Distribution };
 
 export interface FormatContentDebugOptions extends FormatContentOptions {
@@ -41,15 +42,7 @@ export interface FormatResult {
 	diagnostics: Diagnostic[];
 }
 
-export interface FormatDebugResult {
-	/**
-	 * The new formatted content
-	 */
-	content: string;
-	/**
-	 * A series of errors encountered while executing an operation
-	 */
-	diagnostics: Diagnostic[];
+export interface FormatDebugResult extends FormatResult {
 	/**
 	 * The IR emitted by the formatter
 	 */
@@ -132,13 +125,21 @@ export class Biome {
 		}
 	}
 
+	private tryCatchWrapper<T>(func: () => T): T {
+		try {
+			return func();
+		} catch (err) {
+			throw wrapError(err);
+		}
+	}
+
 	private withFile<T>(
 		path: string,
 		content: string,
-		func: (path: RomePath) => T,
+		func: (path: BiomePath) => T,
 	): T {
-		try {
-			const biomePath: RomePath = {
+		return this.tryCatchWrapper(() => {
+			const biomePath: BiomePath = {
 				path,
 			};
 
@@ -155,9 +156,7 @@ export class Biome {
 					path: biomePath,
 				});
 			}
-		} catch (err) {
-			throw wrapError(err);
-		}
+		});
 	}
 
 	formatContent(content: string, options: FormatContentOptions): FormatResult;
@@ -251,7 +250,7 @@ export class Biome {
 		diagnostics: Diagnostic[],
 		options: PrintDiagnosticsOptions,
 	): string {
-		try {
+		return this.tryCatchWrapper(() => {
 			const printer = new this.module.DiagnosticPrinter(
 				options.filePath,
 				options.fileSource,
@@ -265,16 +264,13 @@ export class Biome {
 						printer.print_simple(diag);
 					}
 				}
+				return printer.finish();
 			} catch (err) {
 				// Only call `free` if the `print` method throws, `finish` will
 				// take care of deallocating the printer even if it fails
 				printer.free();
 				throw err;
 			}
-
-			return printer.finish();
-		} catch (err) {
-			throw wrapError(err);
-		}
+		});
 	}
 }

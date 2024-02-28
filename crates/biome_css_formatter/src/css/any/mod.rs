@@ -1,9 +1,7 @@
 //! This is a generated file. Don't modify it by hand! Run 'cargo codegen formatter' to re-generate the file.
 
-pub(crate) mod all_property_value;
 pub(crate) mod at_rule;
 pub(crate) mod attribute_matcher_value;
-pub(crate) mod border_property_value;
 pub(crate) mod compound_selector;
 pub(crate) mod container_and_combinable_query;
 pub(crate) mod container_or_combinable_query;
@@ -16,9 +14,15 @@ pub(crate) mod container_style_query;
 pub(crate) mod declaration_list_block;
 pub(crate) mod declaration_name;
 pub(crate) mod declaration_or_at_rule;
+pub(crate) mod declaration_or_at_rule_block;
+pub(crate) mod declaration_or_rule;
+pub(crate) mod declaration_or_rule_block;
 pub(crate) mod dimension;
 pub(crate) mod document_matcher;
 pub(crate) mod expression;
+pub(crate) mod font_family_name;
+pub(crate) mod font_feature_values_block;
+pub(crate) mod font_feature_values_item;
 pub(crate) mod function;
 pub(crate) mod generic_component_value;
 pub(crate) mod import_layer;
@@ -29,7 +33,6 @@ pub(crate) mod keyframes_block;
 pub(crate) mod keyframes_item;
 pub(crate) mod keyframes_selector;
 pub(crate) mod layer;
-pub(crate) mod line_width;
 pub(crate) mod media_and_combinable_condition;
 pub(crate) mod media_condition;
 pub(crate) mod media_in_parens;
@@ -66,4 +69,3 @@ pub(crate) mod supports_or_combinable_condition;
 pub(crate) mod url_modifier;
 pub(crate) mod url_value;
 pub(crate) mod value;
-pub(crate) mod z_index_property_value;

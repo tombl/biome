@@ -47,7 +47,7 @@ declare_rule! {
     ///     }
     /// }
     /// ```
-    pub(crate) NoUnreachable {
+    pub NoUnreachable {
         version: "1.0.0",
         name: "noUnreachable",
         source: RuleSource::Eslint("no-unreachable"),
@@ -319,7 +319,9 @@ fn analyze_simple(cfg: &JsControlFlowGraph, signals: &mut UnreachableRanges) {
                                 queue.push_back((handler.target, Some(handlers)));
                             }
                         }
-                    } else if reachable_blocks.insert(block.index()) {
+                    }
+
+                    if reachable_blocks.insert(block.index()) {
                         // Insert an edge if this jump is reachable
                         queue.push_back((block, handlers));
                     }
@@ -616,7 +618,7 @@ fn handle_return<'cfg>(
 
 /// Stores a list of unreachable code ranges, sorted in ascending source order
 #[derive(Debug)]
-pub(crate) struct UnreachableRanges {
+pub struct UnreachableRanges {
     ranges: Vec<UnreachableRange>,
 }
 
@@ -940,7 +942,7 @@ impl IntoIterator for UnreachableRanges {
 /// code, along with a list of secondary labels pointing to the dominating
 /// terminator instructions that cause it to be unreachable
 #[derive(Debug)]
-pub(crate) struct UnreachableRange {
+pub struct UnreachableRange {
     text_range: TextRange,
     text_trimmed_range: TextRange,
     terminators: Vec<PathTerminator>,
