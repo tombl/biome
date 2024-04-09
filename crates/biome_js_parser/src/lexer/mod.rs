@@ -642,21 +642,26 @@ impl<'src> JsLexer<'src> {
             }
         }
 
-        unsafe {
-            // Safety: input to the lexer is guaranteed to be valid utf8 and so is the range since we return if there is a wrong amount of digits beforehand
-            let digits_str = std::str::from_utf8_unchecked(
-                self.source
-                    .as_bytes()
-                    .get_unchecked((self.position - 3)..(self.position + 1)),
-            );
-            if let Ok(digits) = u32::from_str_radix(digits_str, 16) {
-                if !advance {
-                    self.position -= 4;
-                }
-                Ok(std::char::from_u32_unchecked(digits))
+        let position = (self.position - 3)..(self.position + 1);
+        // Safety: input to the lexer is guaranteed to be valid utf8 and so is the range since we return if there is a wrong amount of digits beforehand
+        let digits_str = unsafe {
+            std::str::from_utf8_unchecked(self.source.as_bytes().get_unchecked(position.clone()))
+        };
+        if let Ok(digits) = u32::from_str_radix(digits_str, 16) {
+            if !advance {
+                self.position -= 4;
+            }
+            if let Some(chr) = std::char::from_u32(digits) {
+                Ok(chr)
             } else {
-                // Safety: we know this is unreachable because 4 hexdigits cannot make an out of bounds char,
-                // and we make sure that the chars are actually hex digits
+                let err = ParseDiagnostic::new("invalid codepoint for unicode escape", position);
+                self.push_diagnostic(err);
+                Err(())
+            }
+        } else {
+            // Safety: we know this is unreachable because 4 hexdigits cannot make an out of bounds char,
+            // and we make sure that the chars are actually hex digits
+            unsafe {
                 core::hint::unreachable_unchecked();
             }
         }
